@@ -29,8 +29,9 @@ const COM_LIFT = 0.18;
 const SPAWN_POSITION = new CANNON.Vec3(0, 1.1, 8);
 
 export class CarController {
-  // --- Car physics (same names, values and units as the Unity script) ------
-  maxSteerAngle = 30;
+  // --- Car physics (same names and units as the Unity script) --------------
+  // Raised from the script's 30 for a sharper turn-in.
+  maxSteerAngle = 45;
   motorForce = 1500;
   brakeForce = 3000;
 
@@ -248,9 +249,10 @@ export class CarController {
     for (let i = 0; i < 4; i += 1) this.vehicle.setBrake(brake, i);
   }
 
-  /** Unity `HandleSteering`: the front wheels only. */
+  /** Unity `HandleSteering`: the front wheels only, with inverted input. */
   handleSteering() {
-    this.m_steeringAngle = this.maxSteerAngle * this.m_horizontalInput;
+    // Inverted steering: A turns right, D turns left.
+    this.m_steeringAngle = -this.maxSteerAngle * this.m_horizontalInput;
     const radians = this.m_steeringAngle * DEG2RAD;
     this.vehicle.setSteeringValue(radians, 0);
     this.vehicle.setSteeringValue(radians, 1);

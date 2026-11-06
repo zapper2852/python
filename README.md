@@ -16,7 +16,7 @@ npm run dev     # http://localhost:3000
 | --- | --- |
 | `W` / `↑` | Throttle (rear-wheel drive) |
 | `S` / `↓` | Reverse |
-| `A` `D` / `←` `→` | Steering (front wheels only) |
+| `A` `D` / `←` `→` | Steering (front wheels only, inverted: `A` steers right) |
 | `Space` | Handbrake — full brake torque on all four wheels |
 | `R` | Respawn on the straight |
 
@@ -32,8 +32,9 @@ npm run dev     # http://localhost:3000
 | `FixedUpdate` | fixed 1/60 s physics step |
 | `GetWorldPose` in `UpdateWheelPos` | `updateWheelTransform` copied onto the wheel meshes |
 
-`maxSteerAngle`, `motorForce` and `brakeForce` keep the script's names, units
-(degrees, Nm) and defaults in `src/car.js`.
+`maxSteerAngle`, `motorForce` and `brakeForce` keep the script's names and units
+(degrees, Nm) in `src/car.js`. Steering is inverted and `maxSteerAngle` is raised
+from the script's 30° to 45° so the car turns in harder.
 
 ## Files
 
