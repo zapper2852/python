@@ -41,14 +41,14 @@ export function createScene() {
  */
 export function createTrack(world, scene) {
   const ground = new THREE.Mesh(
-    new THREE.PlaneGeometry(500, 500),
+    new THREE.PlaneGeometry(3000, 3000),
     new THREE.MeshStandardMaterial({ color: '#232a33', roughness: 0.95, metalness: 0 })
   );
   ground.rotation.x = -Math.PI / 2;
   ground.receiveShadow = true;
   scene.add(ground);
 
-  const grid = new THREE.GridHelper(200, 100, '#39434f', '#2b333d');
+  const grid = new THREE.GridHelper(600, 300, '#39434f', '#2b333d');
   grid.position.y = 0.01;
   scene.add(grid);
 
@@ -56,7 +56,7 @@ export function createTrack(world, scene) {
   // not hit reliably by the vehicle's suspension raycasts.
   const groundBody = new CANNON.Body({
     mass: 0,
-    shape: new CANNON.Box(new CANNON.Vec3(250, 0.5, 250)),
+    shape: new CANNON.Box(new CANNON.Vec3(20000, 0.5, 20000)),
   });
   groundBody.position.set(0, -0.5, 0);
   world.addBody(groundBody);
