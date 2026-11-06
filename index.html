@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Car Controller — WheelCollider demo</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <canvas id="scene"></canvas>
+
+    <div id="hud" aria-live="polite">
+      <div class="speed">
+        <span id="speed-value">0</span>
+        <span class="unit">km/h</span>
+      </div>
+
+      <dl class="telemetry">
+        <div><dt>Steering</dt><dd><span id="steer-value">0</span>°</dd></div>
+        <div><dt>Motor torque</dt><dd><span id="torque-value">0</span> Nm</dd></div>
+        <div><dt>Brake torque</dt><dd><span id="brake-value">0</span> Nm</dd></div>
+      </dl>
+
+      <p class="drive">Rear-wheel drive · front-wheel steering</p>
+    </div>
+
+    <div id="controls">
+      <p><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or arrows — drive</p>
+      <p><kbd>Space</kbd> — handbrake · <kbd>R</kbd> — reset</p>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
