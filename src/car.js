@@ -265,6 +265,7 @@ export class CarController {
     this.model.steeringWheel.rotation.z =
       -this.m_steeringAngle * DEG2RAD * STEERING_WHEEL_RATIO;
     this.model.setBrakeLights(this.currentBrakeForce > 500);
+    this.model.setDashboard(this.speedKmh);
 
     this.vehicle.wheelInfos.forEach((wheel, index) => {
       this.vehicle.updateWheelTransform(index);

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { buildInterior } from './interior.js';
 
 /** Wheel dimensions shared by the physics wheels and the rendered wheels. */
 export const wheelGeometry = {
@@ -50,6 +51,7 @@ function materials() {
       roughness: 0.4,
     }),
     leather: new THREE.MeshStandardMaterial({ color: '#171a1e', roughness: 0.88 }),
+    headliner: new THREE.MeshStandardMaterial({ color: '#a9adb1', roughness: 0.95 }),
     cabin: new THREE.MeshStandardMaterial({ color: '#242a31', roughness: 0.72 }),
     aluminium: new THREE.MeshStandardMaterial({ color: '#6e7a86', metalness: 0.85, roughness: 0.3 }),
   };
@@ -88,11 +90,15 @@ function box(material, size, position, rotation) {
 
 /** The lower body, extruded from its side profile so it has a real silhouette. */
 function bodyShell(material) {
+  // The cabin section is notched down to floor height so the body is a tub,
+  // not a solid block: the interior is actually visible through the glass.
   const profile = [
     [-2.06, 0.3],
     [-2.1, 0.58],
     [-1.8, 0.72],
     [-0.78, 0.82],
+    [-0.74, 0.44],
+    [1.5, 0.44],
     [1.55, 0.86],
     [2.04, 0.82],
     [2.08, 0.62],
@@ -146,9 +152,14 @@ function buildExterior(root, m) {
       box(m.glass, [0.02, 0.44, 1.06], [side * 0.735, 1.06, -0.36], [0, 0, 0])
     );
     root.add(box(m.glass, [0.02, 0.42, 0.62], [side * 0.735, 1.07, 0.68], [0, 0, 0]));
+
+    // Door and quarter-panel skins close the notched cabin.
+    root.add(box(m.paint, [0.05, 0.435, 2.26], [side * 0.77, 0.6375, 0.38]));
+    root.add(box(m.paint, [0.032, 0.03, 2.26], [side * 0.786, 0.838, 0.38]));
+
     // door shut line + handle
-    root.add(box(m.trim, [0.015, 0.02, 1.42], [side * 0.795, 0.62, 0.35]));
-    root.add(box(m.chrome, [0.03, 0.05, 0.16], [side * 0.8, 0.78, 0.12]));
+    root.add(box(m.trim, [0.015, 0.02, 1.42], [side * 0.803, 0.62, 0.35]));
+    root.add(box(m.chrome, [0.03, 0.05, 0.16], [side * 0.808, 0.78, 0.12]));
     // mirror
     root.add(box(m.trim, [0.1, 0.06, 0.08], [side * 0.86, 0.92, -0.62]));
     root.add(box(m.chrome, [0.06, 0.1, 0.16], [side * 0.93, 0.94, -0.6]));
@@ -156,7 +167,7 @@ function buildExterior(root, m) {
 
   const roof = box(m.paint, [1.44, 0.06, 1.08], [0, 1.36, 0.48]);
   root.add(roof);
-  root.add(box(m.leather, [1.3, 0.03, 0.96], [0, 1.32, 0.48])); // headliner
+  root.add(box(m.headliner, [1.3, 0.03, 0.96], [0, 1.32, 0.48])); // headliner
 
   // Rocker panels, bumpers, arches.
   for (const side of [-1, 1]) {
@@ -188,90 +199,6 @@ function buildExterior(root, m) {
   return { taillights: m.taillight };
 }
 
-function buildInterior(root, m) {
-  root.add(box(m.cabin, [1.42, 0.06, 1.9], [0, 0.42, 0.25])); // floor
-  root.add(box(m.cabin, [1.42, 0.24, 0.42], [0, 0.94, -0.72])); // dash
-  root.add(box(m.leather, [1.4, 0.08, 0.46], [0, 1.06, -0.7])); // dash top
-
-  // Instrument cluster and centre screen.
-  const cluster = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.08, 0.08, 0.02, 20),
-    new THREE.MeshStandardMaterial({
-      color: '#0b1116',
-      emissive: '#2b7fb8',
-      emissiveIntensity: 1.4,
-      roughness: 0.4,
-    })
-  );
-  cluster.rotation.x = Math.PI / 2;
-  cluster.position.set(0.34, 0.98, -0.6);
-  root.add(cluster);
-
-  root.add(
-    box(
-      new THREE.MeshStandardMaterial({
-        color: '#0a1014',
-        emissive: '#1f6f9c',
-        emissiveIntensity: 0.9,
-        roughness: 0.3,
-      }),
-      [0.3, 0.16, 0.02],
-      [0, 0.98, -0.55],
-      [-0.25, 0, 0]
-    )
-  );
-
-  // Seats.
-  for (const x of [0.34, -0.34]) {
-    root.add(box(m.leather, [0.5, 0.14, 0.52], [x, 0.52, 0.2]));
-    root.add(box(m.leather, [0.5, 0.58, 0.13], [x, 0.82, 0.46], [-0.14, 0, 0]));
-    root.add(box(m.leather, [0.26, 0.17, 0.12], [x, 1.14, 0.5]));
-    root.add(box(m.aluminium, [0.34, 0.02, 0.02], [x, 0.66, 0.3]));
-  }
-  // Rear bench.
-  root.add(box(m.leather, [1.3, 0.14, 0.42], [0, 0.55, 0.95]));
-  root.add(box(m.leather, [1.3, 0.5, 0.14], [0, 0.8, 1.2], [-0.16, 0, 0]));
-
-  // Centre console, gear lever, handbrake.
-  root.add(box(m.cabin, [0.24, 0.16, 1.1], [0, 0.5, 0.1]));
-  const lever = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.16, 10), m.aluminium);
-  lever.position.set(0.02, 0.64, -0.18);
-  root.add(lever);
-  const knob = new THREE.Mesh(new THREE.SphereGeometry(0.035, 14, 10), m.leather);
-  knob.position.set(0.02, 0.72, -0.18);
-  root.add(knob);
-  root.add(box(m.leather, [0.06, 0.05, 0.26], [0, 0.6, 0.22], [0.35, 0, 0]));
-
-  // Door cards.
-  for (const side of [-1, 1]) {
-    root.add(box(m.cabin, [0.05, 0.36, 1.6], [side * 0.72, 0.64, 0.2]));
-  }
-
-  // Rear-view mirror.
-  root.add(box(m.trim, [0.24, 0.075, 0.03], [0, 1.26, -0.02]));
-
-  // Steering wheel: outer group tilts the column, inner one spins with input.
-  const column = new THREE.Group();
-  column.position.set(0.34, 0.92, -0.5);
-  column.rotation.x = -0.42;
-
-  const wheel = new THREE.Group();
-  const rim = new THREE.Mesh(new THREE.TorusGeometry(0.17, 0.022, 10, 28), m.leather);
-  wheel.add(rim);
-  for (let i = 0; i < 3; i += 1) {
-    const spoke = box(m.aluminium, [0.3, 0.035, 0.02], [0, 0, 0]);
-    spoke.rotation.z = (i / 3) * Math.PI * 2;
-    wheel.add(spoke);
-  }
-  const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.04, 16), m.leather);
-  hub.rotation.x = Math.PI / 2;
-  wheel.add(hub);
-  column.add(wheel);
-  root.add(column);
-
-  return { steeringWheel: wheel };
-}
-
 export function createCarModel() {
   const m = materials();
   const root = new THREE.Group();
@@ -293,6 +220,10 @@ export function createCarModel() {
     driverEye: new THREE.Vector3(0.34, 1.16, 0.12),
     setBrakeLights(on) {
       exterior.taillights.emissiveIntensity = on ? 3.2 : 0.55;
+    },
+    /** Live speedometer and tachometer needles. */
+    setDashboard(speedKmh) {
+      interior.setDashboard(speedKmh);
     },
   };
 }
