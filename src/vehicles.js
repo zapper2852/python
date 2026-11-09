@@ -62,12 +62,26 @@ function box(material, size, position) {
  * A generic road car, nose pointing down -Z like the player's car.
  * Returns the group plus the wheel meshes so callers can spin them.
  */
-export function createSimpleCar(color = '#c9d1d9', { taxi = false } = {}) {
+const paintCache = new Map();
+
+function paintMaterial(color) {
+  if (!paintCache.has(color)) {
+    paintCache.set(
+      color,
+      new THREE.MeshStandardMaterial({ color, metalness: 0.55, roughness: 0.35 })
+    );
+  }
+  return paintCache.get(color);
+}
+
+export function createSimpleCar(color = '#c9d1d9', { taxi = false, brakeLights = true } = {}) {
   const m = materials();
   const group = new THREE.Group();
 
-  const paint = new THREE.MeshStandardMaterial({ color, metalness: 0.55, roughness: 0.35 });
-  const accent = new THREE.MeshStandardMaterial({ color: '#f2c200', roughness: 0.5 });
+  const paint = paintMaterial(color);
+  const accent = paintMaterial('#f2c200');
+  // Own tail material per car so brake lights can light up independently.
+  const brakeLight = brakeLights ? m.tail.clone() : m.tail;
 
   // Body panels are merged per material: one draw call each instead of dozens.
   const parts = [
@@ -86,7 +100,7 @@ export function createSimpleCar(color = '#c9d1d9', { taxi = false } = {}) {
     parts.push([paint, [0.07, 0.46, 0.12], [side * 0.78, 1.2, 0.98]]);
     parts.push([m.dark, [0.14, 0.09, 0.06], [side * 0.96, 1.16, -0.72]]);
     parts.push([m.head, [0.42, 0.14, 0.06], [side * 0.58, 0.8, -2.18]]);
-    parts.push([m.tail, [0.4, 0.12, 0.06], [side * 0.6, 0.84, 2.18]]);
+    parts.push([brakeLight, [0.4, 0.12, 0.06], [side * 0.6, 0.84, 2.18]]);
   }
   if (taxi) {
     parts.push([accent, [0.5, 0.18, 0.2], [0, 1.6, 0.3]]);
@@ -132,5 +146,5 @@ export function createSimpleCar(color = '#c9d1d9', { taxi = false } = {}) {
     }
   });
 
-  return { group, wheels };
+  return { group, wheels, brakeLight };
 }

@@ -4,9 +4,11 @@ import { createPhysicsWorld, createScene, addGround } from './world.js';
 import { CarController } from './car.js';
 import { Hud } from './hud.js';
 import { buildCity } from './city.js';
+import { createStaticColliders } from './collision.js';
 import { createTraffic } from './traffic.js';
 import { createPedestrians } from './pedestrians.js';
 import { Player } from './player.js';
+import { Minimap } from './minimap.js';
 import { initInput, keys, isShift, isCrouch } from './input.js';
 
 const FIXED_STEP = 1 / 60;
@@ -30,13 +32,18 @@ scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 
 const world = createPhysicsWorld();
 addGround(world);
-buildCity(scene);
+const city = buildCity(scene);
+createStaticColliders(world, city.colliders);
 
 const car = new CarController(world, scene);
-const traffic = createTraffic(scene, car, 20);
+const traffic = createTraffic(scene, car, 24, world);
 const peds = createPedestrians(scene, 16);
 const player = new Player(scene);
 const hud = new Hud();
+const minimap = new Minimap(document.getElementById('minimap'), {
+  gasStations: city.gasStations,
+  info: document.getElementById('minimap-info'),
+});
 
 initInput();
 car.attachInput();
@@ -183,11 +190,13 @@ function updateCamera(delta) {
 // --- Loop ------------------------------------------------------------------
 const clock = new THREE.Clock();
 let accumulator = 0;
+let elapsed = 0;
 
 function frame() {
   requestAnimationFrame(frame);
 
   const delta = Math.min(clock.getDelta(), 0.1);
+  elapsed += delta;
   accumulator += delta;
   while (accumulator >= FIXED_STEP) {
     car.fixedUpdate(FIXED_STEP);
@@ -196,7 +205,8 @@ function frame() {
   }
 
   car.syncMeshes();
-  traffic.update(delta);
+  traffic.update(delta, elapsed);
+  city.signals.update(elapsed);
 
   if (onFoot) {
     const rotate = (keys.has('KeyQ') ? 1 : 0) - (keys.has('KeyE') ? 1 : 0);
@@ -225,6 +235,14 @@ function frame() {
   updateCamera(delta);
   hud.update(car.telemetry);
 
+  const heading = onFoot ? player.yaw : Math.atan2(-forward.x, -forward.z);
+  minimap.update({
+    x: onFoot ? player.position.x : carPosition.x,
+    z: onFoot ? player.position.z : carPosition.z,
+    heading,
+    traffic: traffic.cars.map((ai) => ai.pos),
+  });
+
   // Keep the shadow volume around whatever we are looking at.
   const focus = onFoot ? player.position : carPosition;
   sun.position.copy(focus).add(sunOffset);
@@ -246,6 +264,8 @@ window.carDemo = {
   traffic,
   peds,
   player,
+  city,
+  minimap,
   reset: snapCamera,
   getView: () => (onFoot ? 'foot' : view),
   isOnFoot: () => onFoot,

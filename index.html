@@ -16,12 +16,19 @@
       </div>
 
       <dl class="telemetry">
+        <div><dt>Gear</dt><dd><span id="gear-value">1</span></dd></div>
         <div><dt>Steering</dt><dd><span id="steer-value">0</span>°</dd></div>
         <div><dt>Motor torque</dt><dd><span id="torque-value">0</span> Nm</dd></div>
         <div><dt>Brake torque</dt><dd><span id="brake-value">0</span> Nm</dd></div>
       </dl>
 
-      <p class="drive">Rear-wheel drive · front-wheel steering</p>
+      <p class="drive">Automatic 6-speed · rear-wheel drive</p>
+    </div>
+
+    <div id="minimap-panel">
+      <canvas id="minimap"></canvas>
+      <div id="minimap-info">Nearest fuel · —</div>
+      <div class="minimap-key"><span class="fuel-dot"></span> Gas station</div>
     </div>
 
     <div id="controls">

@@ -95,10 +95,13 @@ export function createPerson({
     knee.position.set(0, -0.44, 0);
     hipJoint.add(knee);
     knee.add(part(pantsM, [0.15, 0.4, 0.17], [0, -0.2, 0]));
-    const foot = part(shoeM, [0.15, 0.1, 0.3], [0, -0.44, -0.06]);
-    knee.add(foot);
 
-    legs.push({ hip: hipJoint, knee });
+    const ankle = new THREE.Group();
+    ankle.position.set(0, -0.44, 0);
+    knee.add(ankle);
+    ankle.add(part(shoeM, [0.15, 0.1, 0.3], [0, 0, -0.06]));
+
+    legs.push({ hip: hipJoint, knee, ankle });
   }
 
   root.scale.setScalar(scale);
@@ -137,50 +140,71 @@ export function animatePerson(rig, { dt = 1 / 60, speed = 0, crouch = false, sea
   a.crouch = damp(a.crouch, crouch ? 1 : 0, dt, 8);
 
   if (seated) {
-    rig.hips.position.y = damp(rig.hips.position.y, HIP_HEIGHT - 0.16, dt, 10);
+    rig.hips.position.y = damp(rig.hips.position.y, HIP_HEIGHT - 0.1, dt, 10);
     rig.hips.rotation.x = damp(rig.hips.rotation.x, 0, dt, 8);
-    rig.torso.rotation.x = damp(rig.torso.rotation.x, 0.08, dt, 8);
+    rig.torso.rotation.x = damp(rig.torso.rotation.x, 0.06, dt, 8);
+    rig.torso.rotation.y = damp(rig.torso.rotation.y, 0, dt, 8);
     for (const leg of rig.legs) {
-      leg.hip.rotation.x = damp(leg.hip.rotation.x, -1.35, dt, 10);
-      leg.knee.rotation.x = damp(leg.knee.rotation.x, 1.3, dt, 10);
+      // Thighs forward, shins hanging down: knees bend backwards, never forwards.
+      leg.hip.rotation.x = damp(leg.hip.rotation.x, 1.32, dt, 10);
+      leg.knee.rotation.x = damp(leg.knee.rotation.x, -1.28, dt, 10);
+      leg.ankle.rotation.x = damp(leg.ankle.rotation.x, 0.18, dt, 10);
+      leg.hip.rotation.z = damp(leg.hip.rotation.z, 0, dt, 10);
     }
-    for (const arm of rig.arms) arm.rotation.x = damp(arm.rotation.x, -0.75, dt, 10);
-    for (const elbow of rig.hands) elbow.rotation.x = damp(elbow.rotation.x, -0.5, dt, 10);
+    for (const arm of rig.arms) arm.rotation.x = damp(arm.rotation.x, 0.92, dt, 10);
+    for (const elbow of rig.hands) elbow.rotation.x = damp(elbow.rotation.x, -0.26, dt, 10);
     for (const arm of rig.arms) arm.rotation.z = damp(arm.rotation.z, 0.12, dt, 10);
+    rig.head.rotation.x = damp(rig.head.rotation.x, 0, dt, 10);
     return;
   }
 
   const moving = a.speed > 0.05;
-  const stride = Math.min(a.speed / 1.5, 2.4);
-  a.phase += a.speed * dt * 3.1;
+  const stride = Math.min(a.speed / 1.6, 2.3);
+  a.phase += a.speed * dt * 2.9;
+  const p = a.phase;
 
-  const swing = Math.sin(a.phase) * 0.62 * stride;
-  const swingBack = Math.sin(a.phase + Math.PI) * 0.62 * stride;
-  const kneeBend = (p) => Math.max(0, Math.cos(p)) * 0.9 * Math.min(stride, 1.6);
+  const swing = Math.sin(p) * 0.55 * stride;
 
-  const hipY = HIP_HEIGHT - a.crouch * 0.36 - (moving ? Math.abs(Math.sin(a.phase * 2)) * 0.035 * Math.min(stride, 1.4) : 0);
+  // Knee flexion peaks just after toe-off, tucking the heel up behind the leg.
+  // A positive hip angle swings the leg forward, a negative knee angle folds it
+  // backwards — the old cycle had this reversed, which read as walking backwards.
+  const flexAt = (phase) =>
+    Math.pow(Math.max(0, -Math.sin(phase - Math.PI / 8)), 2) * 1.4 * Math.min(stride, 1.7);
+  const flexA = moving ? flexAt(p) : 0;
+  const flexB = moving ? flexAt(p + Math.PI) : 0;
+
+  const crouchHip = a.crouch * 0.78;
+  const crouchKnee = a.crouch * 1.85;
+
+  rig.legs[0].hip.rotation.x = swing + crouchHip;
+  rig.legs[1].hip.rotation.x = -swing + crouchHip;
+  rig.legs[0].knee.rotation.x = -flexA - crouchKnee;
+  rig.legs[1].knee.rotation.x = -flexB - crouchKnee;
+  rig.legs[0].ankle.rotation.x = flexA * 0.42 + a.crouch * 0.55;
+  rig.legs[1].ankle.rotation.x = flexB * 0.42 + a.crouch * 0.55;
+  rig.legs[0].hip.rotation.z = damp(rig.legs[0].hip.rotation.z, a.crouch * 0.12, dt, 8);
+  rig.legs[1].hip.rotation.z = damp(rig.legs[1].hip.rotation.z, -a.crouch * 0.12, dt, 8);
+
+  const bob = moving ? Math.abs(Math.sin(p * 2)) * 0.028 * Math.min(stride, 1.5) : 0;
+  const hipY = HIP_HEIGHT - a.crouch * 0.34 - bob;
   rig.hips.position.y = damp(rig.hips.position.y, hipY, dt, 14);
 
-  const crouchBend = a.crouch * 1.05;
-  rig.legs[0].hip.rotation.x = -swing - crouchBend;
-  rig.legs[1].hip.rotation.x = -swingBack - crouchBend;
-  rig.legs[0].knee.rotation.x = kneeBend(a.phase) + a.crouch * 1.75;
-  rig.legs[1].knee.rotation.x = kneeBend(a.phase + Math.PI) + a.crouch * 1.75;
-  rig.legs[0].hip.rotation.z = damp(rig.legs[0].hip.rotation.z, a.crouch * 0.14, dt, 8);
-  rig.legs[1].hip.rotation.z = damp(rig.legs[1].hip.rotation.z, -a.crouch * 0.14, dt, 8);
+  const armSwing = swing * 0.85;
+  rig.arms[0].rotation.x = -armSwing - 0.04 + a.crouch * 0.32;
+  rig.arms[1].rotation.x = armSwing - 0.04 + a.crouch * 0.32;
+  rig.arms[0].rotation.z = 0.09 + a.crouch * 0.14;
+  rig.arms[1].rotation.z = -0.09 - a.crouch * 0.14;
+  rig.hands[0].rotation.x = moving ? 0.16 + Math.max(0, -Math.sin(p)) * 0.45 : 0.12;
+  rig.hands[1].rotation.x = moving ? 0.16 + Math.max(0, Math.sin(p)) * 0.45 : 0.12;
 
-  const armAmp = moving ? 0.42 * stride : 0;
-  rig.arms[0].rotation.x = swing * 0.85 * (armAmp > 0 ? 1 : 0) - 0.05;
-  rig.arms[1].rotation.x = swingBack * 0.85 * (armAmp > 0 ? 1 : 0) - 0.05;
-  rig.arms[0].rotation.z = 0.08 + a.crouch * 0.1;
-  rig.arms[1].rotation.z = -0.08 - a.crouch * 0.1;
-  rig.hands[0].rotation.x = moving ? Math.max(0, -Math.sin(a.phase)) * 0.7 : 0.12;
-  rig.hands[1].rotation.x = moving ? Math.max(0, Math.sin(a.phase)) * 0.7 : 0.12;
-
-  // Lean into the run, bob the head, keep the idle pose alive.
-  a.lean = damp(a.lean, Math.min(a.speed / 8, 1) * 0.16 + a.crouch * 0.18, dt, 6);
+  // Lean into the run, counter-rotate the torso, keep the idle pose alive.
+  a.lean = damp(a.lean, Math.min(a.speed / 8, 1) * 0.14 + a.crouch * 0.2, dt, 6);
   rig.torso.rotation.x = a.lean;
-  rig.torso.rotation.z = moving ? Math.sin(a.phase) * 0.05 : Math.sin(performance.now() * 0.0012) * 0.012;
-  rig.head.rotation.x = -a.lean * 0.55;
-  rig.head.rotation.z = moving ? Math.sin(a.phase) * 0.04 : 0;
+  rig.torso.rotation.y = moving ? Math.sin(p) * 0.06 * Math.min(stride, 1.4) : 0;
+  rig.torso.rotation.z = moving
+    ? Math.sin(p) * 0.04
+    : Math.sin(performance.now() * 0.0012) * 0.012;
+  rig.head.rotation.x = -a.lean * 0.5;
+  rig.head.rotation.y = -rig.torso.rotation.y * 0.7;
+  rig.head.rotation.z = moving ? Math.sin(p) * 0.035 : 0;
 }

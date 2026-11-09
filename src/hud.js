@@ -5,6 +5,7 @@ export class Hud {
     this.steering = document.getElementById('steer-value');
     this.torque = document.getElementById('torque-value');
     this.brake = document.getElementById('brake-value');
+    this.gear = document.getElementById('gear-value');
   }
 
   update(telemetry) {
@@ -12,5 +13,6 @@ export class Hud {
     this.steering.textContent = String(telemetry.steering);
     this.torque.textContent = String(telemetry.torque);
     this.brake.textContent = String(telemetry.brake);
+    this.gear.textContent = String(telemetry.gear);
   }
 }
