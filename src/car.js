@@ -10,6 +10,8 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import { createCarModel, createWheelMesh, wheelGeometry, groundOffsetY } from './carModel.js';
+import { keys as sharedKeys } from './input.js';
+import { gripAt } from './city.js';
 
 const DEG2RAD = Math.PI / 180;
 
@@ -24,18 +26,19 @@ const COM_LIFT = 0.18;
 const SPAWN_POSITION = new CANNON.Vec3(0, 1.1, 8);
 
 // --- Road behaviour --------------------------------------------------------
-const TOP_SPEED_KMH = 200;
-const TORQUE_FALLOFF = 0.77; // how much torque fades towards top speed
-const DRAG = 0.42; // N per (m/s)²
-const ROLLING_RESISTANCE = 160; // N
-const COAST_BRAKE_TORQUE = 220; // Nm of engine braking off-throttle
-const FRONT_BRAKE_BIAS = 0.65;
+const TOP_SPEED_KMH = 210;
+const TORQUE_FALLOFF = 0.58; // how much torque fades towards top speed
+const DRAG = 0.38; // N per (m/s)²
+const ROLLING_RESISTANCE = 150; // N
+const COAST_BRAKE_TORQUE = 240; // Nm of engine braking off-throttle
+const FRONT_BRAKE_BIAS = 0.62;
+const BASE_FRICTION = 2.9; // dry-asphalt tyre grip, scaled by the surface
 // The tyres can only use so much brake torque; asking for more just locks the
 // wheels and upsets the car, so the request is clamped to roughly 1 g.
-const GRIP_BRAKE_TORQUE = 1150;
-const BRAKE_RAMP_SECONDS = 0.18;
-const STEERING_FADE_KMH = 130;
-const STEERING_FADE = 0.55; // share of lock given up at speed
+const GRIP_BRAKE_TORQUE = 1400;
+const BRAKE_RAMP_SECONDS = 0.13;
+const STEERING_FADE_KMH = 120;
+const STEERING_FADE = 0.58; // share of lock given up at speed
 const STEERING_WHEEL_RATIO = 2.2;
 
 const tempForce = new CANNON.Vec3();
@@ -44,8 +47,8 @@ const tempForward = new CANNON.Vec3();
 export class CarController {
   // --- Car physics (same names and units as the Unity script) --------------
   // Raised from the script's 30 for a sharper turn-in.
-  maxSteerAngle = 45;
-  motorForce = 1500;
+  maxSteerAngle = 40;
+  motorForce = 2100;
   brakeForce = 3000;
 
   constructor(world, scene) {
@@ -58,7 +61,9 @@ export class CarController {
     this.currentBrakeForce = 0;
     this.currentEngineTorque = 0;
     this.brakeRamp = 0;
-    this.keys = new Set();
+    this.controlEnabled = true;
+    this.currentGrip = 1;
+    this.keys = sharedKeys;
 
     this.chassisBody = new CANNON.Body({ mass: 1200, linearDamping: 0.01 });
     this.chassisBody.addShape(
@@ -79,14 +84,14 @@ export class CarController {
       radius: WHEEL_RADIUS,
       directionLocal: new CANNON.Vec3(0, -1, 0),
       axleLocal: new CANNON.Vec3(-1, 0, 0),
-      suspensionStiffness: 340,
+      suspensionStiffness: 365,
       suspensionRestLength: SUSPENSION_REST_LENGTH,
-      frictionSlip: 2.4,
-      dampingRelaxation: 2.3,
-      dampingCompression: 4.4,
+      frictionSlip: BASE_FRICTION,
+      dampingRelaxation: 2.5,
+      dampingCompression: 4.7,
       maxSuspensionForce: 200000,
-      rollInfluence: 0.05,
-      maxSuspensionTravel: 0.3,
+      rollInfluence: 0.035,
+      maxSuspensionTravel: 0.32,
       customSlidingRotationalSpeed: -30,
       useCustomSlidingRotationalSpeed: true,
     };
@@ -131,35 +136,28 @@ export class CarController {
 
   // --- Input (Unity `GetInput`) --------------------------------------------
   attachInput() {
-    const handled = new Set([
-      'KeyW',
-      'KeyA',
-      'KeyS',
-      'KeyD',
-      'ArrowUp',
-      'ArrowDown',
-      'ArrowLeft',
-      'ArrowRight',
-      'Space',
-    ]);
+    this.keys = sharedKeys;
+  }
 
-    window.addEventListener('keydown', (event) => {
-      if (!handled.has(event.code)) return;
-      event.preventDefault();
-      this.keys.add(event.code);
-    });
-
-    window.addEventListener('keyup', (event) => {
-      if (!handled.has(event.code)) return;
-      event.preventDefault();
-      this.keys.delete(event.code);
-    });
-
-    window.addEventListener('blur', () => this.keys.clear());
+  /** Stops the car taking keyboard input while the player is on foot. */
+  setControlEnabled(enabled) {
+    this.controlEnabled = enabled;
+    if (!enabled) {
+      this.m_horizontalInput = 0;
+      this.m_verticalInput = 0;
+      this.currentEngineTorque = 0;
+      this.vehicle.applyEngineForce(0, 2);
+      this.vehicle.applyEngineForce(0, 3);
+    }
   }
 
   /** Mirrors `Input.GetAxis("Horizontal"/"Vertical")` for WASD and arrow keys. */
   getInput() {
+    if (!this.controlEnabled) {
+      this.m_horizontalInput = 0;
+      this.m_verticalInput = 0;
+      return;
+    }
     const left = this.keys.has('KeyA') || this.keys.has('ArrowLeft');
     const right = this.keys.has('KeyD') || this.keys.has('ArrowRight');
     const forward = this.keys.has('KeyW') || this.keys.has('ArrowUp');
@@ -172,7 +170,15 @@ export class CarController {
   /** Torque available at the wheels, fading towards top speed. */
   engineTorque() {
     const ratio = Math.min(this.speedKmh / TOP_SPEED_KMH, 1);
-    return this.motorForce * (1 - TORQUE_FALLOFF * ratio * ratio);
+    return this.motorForce * (1 - TORQUE_FALLOFF * Math.pow(ratio, 1.6));
+  }
+
+  /** Tarmac, wet patches and kerbs all get different tyre grip. */
+  applySurfaceGrip() {
+    const grip = gripAt(this.chassisBody.position.x, this.chassisBody.position.z);
+    if (Math.abs(grip - this.currentGrip) < 0.001) return;
+    this.currentGrip = grip;
+    for (const wheel of this.vehicle.wheelInfos) wheel.frictionSlip = BASE_FRICTION * grip;
   }
 
   /**
@@ -251,6 +257,7 @@ export class CarController {
   /** One physics tick — corresponds to Unity's `FixedUpdate`. */
   fixedUpdate(delta = 1 / 60) {
     this.getInput();
+    this.applySurfaceGrip();
     this.handleMotor(delta);
     this.handleSteering();
     this.applyResistance();
@@ -282,7 +289,6 @@ export class CarController {
     this.chassisBody.angularVelocity.setZero();
     this.chassisBody.force.setZero();
     this.chassisBody.torque.setZero();
-    this.keys.clear();
     this.m_horizontalInput = 0;
     this.m_verticalInput = 0;
     this.m_steeringAngle = 0;

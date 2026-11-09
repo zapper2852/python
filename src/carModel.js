@@ -144,14 +144,15 @@ function buildExterior(root, m) {
     );
   }
 
-  root.add(panel(m.glass, { z1: -0.78, y1: 0.84, z2: -0.06, y2: 1.33, width: 1.42 }));
-  root.add(panel(m.glass, { z1: 1.02, y1: 1.33, z2: 1.58, y2: 0.88, width: 1.42 }));
+  root.add(panel(m.glass, { z1: -0.78, y1: 0.845, z2: -0.06, y2: 1.33, width: 1.4 }));
+  root.add(panel(m.glass, { z1: 1.02, y1: 1.33, z2: 1.57, y2: 0.885, width: 1.4 }));
 
   for (const side of [-1, 1]) {
-    root.add(
-      box(m.glass, [0.02, 0.44, 1.06], [side * 0.735, 1.06, -0.36], [0, 0, 0])
-    );
-    root.add(box(m.glass, [0.02, 0.42, 0.62], [side * 0.735, 1.07, 0.68], [0, 0, 0]));
+    // Side glass sits inside the pillars and above the beltline so it never
+    // pokes out through the door skin.
+    root.add(box(m.glass, [0.02, 0.44, 1.0], [side * 0.735, 1.08, -0.22]));
+    root.add(box(m.glass, [0.02, 0.42, 0.56], [side * 0.735, 1.08, 0.7]));
+    root.add(box(m.trim, [0.025, 0.44, 0.06], [side * 0.737, 1.08, 0.33]));
 
     // Door and quarter-panel skins close the notched cabin.
     root.add(box(m.paint, [0.05, 0.435, 2.26], [side * 0.77, 0.6375, 0.38]));
