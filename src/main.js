@@ -572,6 +572,10 @@ const desiredCamera = new THREE.Vector3();
 const lookAt = new THREE.Vector3();
 const cockpitWorld = new THREE.Vector3();
 const pitchDown = new THREE.Quaternion().setFromEuler(new THREE.Euler(-0.045, 0, 0));
+// The helmet cam sits high above the bars, so it needs a steeper tilt on the
+// bike to frame the tank and front wheel.
+const bikeGoProPitch = new THREE.Quaternion().setFromEuler(new THREE.Euler(-0.42, 0, 0));
+const goproOffset = new THREE.Vector3();
 
 function activeBody() {
   return mount === 'bike' ? bike.chassisBody : car.chassisBody;
@@ -661,9 +665,16 @@ function updateCamera(delta) {
   }
 
   if (view === 'gopro') {
-    setFov(78);
+    setFov(mount === 'bike' ? 84 : 78);
     camera.position.copy(player.helmetCameraWorld);
-    camera.quaternion.copy(carQuat).multiply(pitchDown);
+    if (mount === 'bike') {
+      // Sit the lens over the bars so the tank, dash and front end are in frame.
+      goproOffset.set(0, -0.02, -0.3).applyQuaternion(carQuat);
+      camera.position.add(goproOffset);
+      camera.quaternion.copy(carQuat).multiply(bikeGoProPitch);
+    } else {
+      camera.quaternion.copy(carQuat).multiply(pitchDown);
+    }
     return;
   }
 
@@ -711,7 +722,11 @@ function frame() {
   while (accumulator >= FIXED_STEP) {
     if (mount === 'car' && !onFoot) car.fixedUpdate(FIXED_STEP);
     else car.fixedUpdate(FIXED_STEP);
-    if (mount === 'bike' && !onFoot) bike.fixedUpdate(FIXED_STEP);
+    for (const parked of bikes) {
+      if (parked === bike && mount === 'bike' && !onFoot) parked.fixedUpdate(FIXED_STEP);
+      // Unridden bikes keep the same self-righting torque so they stay upright.
+      else parked.updateStability(FIXED_STEP);
+    }
     world.step(FIXED_STEP);
     accumulator -= FIXED_STEP;
   }

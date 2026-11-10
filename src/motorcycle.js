@@ -98,6 +98,9 @@ function buildBikeWheel(radius) {
   const disc = new THREE.MeshStandardMaterial({ color: '#8f979f', metalness: 0.9, roughness: 0.3 });
 
   const tyre = new THREE.Mesh(new THREE.TorusGeometry(radius - 0.055, 0.055, 10, 26), rubber);
+  // The torus is built in the XY plane; turn it so it spins around the axle (X)
+  // like the rim and spokes already do.
+  tyre.rotation.y = Math.PI / 2;
   group.add(tyre);
   const rimMesh = new THREE.Mesh(new THREE.CylinderGeometry(radius - 0.1, radius - 0.1, 0.05, 20), rim);
   rimMesh.rotation.z = Math.PI / 2;
@@ -213,6 +216,8 @@ export class Motorcycle {
       this.vehicle.applyEngineForce(0, 1);
       this.vehicle.setBrake(2, 0);
       this.vehicle.setBrake(2, 1);
+      this.lean = 0;
+      this.wheelie = 0;
     }
   }
 
@@ -300,7 +305,7 @@ export class Motorcycle {
   syncMeshes(updateDash = true) {
     this.chassisGroup.position.copy(this.chassisBody.position);
     this.chassisGroup.quaternion.copy(this.chassisBody.quaternion);
-    this.model.root.rotation.z = -this.lean;
+    this.model.root.rotation.z = this.lean;
     this.model.root.rotation.x = this.wheelie * 0.32;
 
     this.vehicle.wheelInfos.forEach((wheel, index) => {
