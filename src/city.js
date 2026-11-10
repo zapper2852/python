@@ -471,6 +471,8 @@ function buildParkingLot(scene, bounds, rngFn) {
   const bayW = 2.6;
   const bayD = 5.2;
   const perRow = 11;
+  // Two bays in the front row are kept clear for motorcycles.
+  const motoBays = [2, 8];
   const lines = [];
   for (const rowZ of [cz - 8, cz + 8]) {
     for (let i = 0; i <= perRow; i += 1) {
@@ -479,7 +481,9 @@ function buildParkingLot(scene, bounds, rngFn) {
     }
     for (let i = 0; i < perRow; i += 1) {
       const x = cx - (perRow * bayW) / 2 + bayW / 2 + i * bayW;
-      if (rngFn() < 0.7) {
+      const roll = rngFn();
+      if (rowZ > cz && motoBays.includes(i)) continue;
+      if (roll < 0.7) {
         // Nose-in parking with a little human variation, not a perfect grid.
         const backing = rowZ < cz;
         const jitter = (rngFn() - 0.5) * 0.3;
@@ -496,7 +500,11 @@ function buildParkingLot(scene, bounds, rngFn) {
     x: cx,
     z: cz,
     bayW,
-    moto: { x: cx - (perRow * bayW) / 2 + bayW * 2.5, z: cz + 8 + bayD * 0.45 },
+    motos: motoBays.map((index) => ({
+      x: cx - (perRow * bayW) / 2 + bayW * (index + 0.5),
+      z: cz + 8 + bayD * 0.45,
+      yaw: 0,
+    })),
   });
   const paintMesh = new THREE.Mesh(mergeGeometries(lines), paint);
   paintMesh.receiveShadow = true;

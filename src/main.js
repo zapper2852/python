@@ -48,9 +48,14 @@ createStaticColliders(world, city.colliders);
 const game = new Game();
 const audio = new AudioKit();
 const car = new CarController(world, scene);
-const bike = new Motorcycle(world, scene);
-const lot = city.parkingLots[0];
-if (lot) bike.parkAt(lot.moto.x, lot.moto.z, 0);
+// Two parked, rideable bikes in every parking lot.
+const bikes = city.parkingLots.flatMap((lot) => lot.motos).map((spot) => {
+  const parked = new Motorcycle(world, scene);
+  parked.parkAt(spot.x, spot.z, spot.yaw);
+  parked.setControlEnabled(false);
+  return parked;
+});
+let bike = bikes[0];
 
 const traffic = createTraffic(scene, car, 26, world);
 const peds = createPedestrians(scene, 22);
@@ -88,7 +93,7 @@ const minimap = new Minimap(document.getElementById('minimap'), {
   pois: [
     ...jobs.markers.map((m) => ({ x: m.x, z: m.z, color: m.color, label: m.label })),
     { x: city.policeStation.x, z: city.policeStation.z, color: '#4d8dff', label: 'P' },
-    ...(lot ? [{ x: lot.moto.x, z: lot.moto.z, color: '#e8452f', label: 'B' }] : []),
+    ...bikes.map((b) => ({ x: b.home.x, z: b.home.z, color: '#e8452f', label: 'B' })),
   ],
 });
 
@@ -164,6 +169,22 @@ function playerPosition() {
   return { x: player.position.x, z: player.position.z };
 }
 
+function nearestBike(position, radius = 4.5) {
+  let best = null;
+  let bestDistance = radius;
+  for (const candidate of bikes) {
+    const distance = Math.hypot(
+      position.x - candidate.chassisGroup.position.x,
+      position.z - candidate.chassisGroup.position.z
+    );
+    if (distance < bestDistance) {
+      best = candidate;
+      bestDistance = distance;
+    }
+  }
+  return best;
+}
+
 function refreshPrompt() {
   promptText = '';
   pendingInteract = null;
@@ -201,9 +222,10 @@ function refreshPrompt() {
     return;
   }
 
-  if (Math.hypot(player.position.x - bike.chassisGroup.position.x, player.position.z - bike.chassisGroup.position.z) < 4) {
+  const parkedBike = nearestBike(player.position, 4);
+  if (parkedBike) {
     promptText = 'E · Ride the motorcycle';
-    pendingInteract = () => mountBike();
+    pendingInteract = () => mountBike(parkedBike);
     return;
   }
 
@@ -230,11 +252,12 @@ function interact() {
 }
 
 // --- vehicle switching ------------------------------------------------------
-function mountBike() {
+function mountBike(target = bike) {
   onFoot = false;
   mount = 'bike';
+  bike = target;
   player.enterBike(bike);
-  bike.setControlEnabled(true);
+  for (const other of bikes) other.setControlEnabled(other === bike);
   car.setControlEnabled(false);
   view = 'chase';
   game.notify('Race bike · Space for a wheelie', 'info');
@@ -361,11 +384,8 @@ window.addEventListener('keydown', (event) => {
       return;
     }
     if (mount === 'bike') {
-      const distance = Math.hypot(
-        player.position.x - bike.chassisGroup.position.x,
-        player.position.z - bike.chassisGroup.position.z
-      );
-      if (distance < 5) mountBike();
+      const near = nearestBike(player.position, 5);
+      if (near) mountBike(near);
       return;
     }
     if (mount === 'car') {
@@ -374,11 +394,8 @@ window.addEventListener('keydown', (event) => {
       if (distance < 5) mountCar();
       return;
     }
-    const bikeDistance = Math.hypot(
-      player.position.x - bike.chassisGroup.position.x,
-      player.position.z - bike.chassisGroup.position.z
-    );
-    if (bikeDistance < 4.5) mountBike();
+    const near = nearestBike(player.position, 4.5);
+    if (near) mountBike(near);
     else mountCar();
   }
 });
@@ -537,7 +554,7 @@ game.on('jail', ({ seconds }) => {
   mount = 'car';
   player.detachVehicle();
   car.setControlEnabled(false);
-  bike.setControlEnabled(false);
+  for (const parked of bikes) parked.setControlEnabled(false);
 });
 game.on('released', () => {
   hud.hideJail();
@@ -700,7 +717,7 @@ function frame() {
   }
 
   car.syncMeshes();
-  bike.syncMeshes();
+  for (const parked of bikes) parked.syncMeshes(parked === bike && !onFoot);
 
   traffic.update(delta, elapsed);
   for (const ai of traffic.cars) {
@@ -836,7 +853,8 @@ frame();
 window.carDemo = {
   renderer,
   car,
-  bike,
+  bikes,
+  getActiveBike: () => bike,
   world,
   scene,
   camera,

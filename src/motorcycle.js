@@ -190,8 +190,9 @@ export class Motorcycle {
   }
 
   reset() {
-    this.chassisBody.position.copy(this.spawn);
-    this.chassisBody.quaternion.setFromEuler(0, Math.PI / 2, 0);
+    const spot = this.home || { x: this.spawn.x, z: this.spawn.z, yaw: Math.PI / 2 };
+    this.chassisBody.position.set(spot.x, groundHeightAt(spot.x, spot.z) + 0.9, spot.z);
+    this.chassisBody.quaternion.setFromEuler(0, spot.yaw, 0);
     this.chassisBody.velocity.setZero();
     this.chassisBody.angularVelocity.setZero();
     this.chassisBody.force.setZero();
@@ -296,7 +297,7 @@ export class Motorcycle {
     this.chassisBody.angularVelocity.vsub(forward.scale(roll * 0.06), this.chassisBody.angularVelocity);
   }
 
-  syncMeshes() {
+  syncMeshes(updateDash = true) {
     this.chassisGroup.position.copy(this.chassisBody.position);
     this.chassisGroup.quaternion.copy(this.chassisBody.quaternion);
     this.model.root.rotation.z = -this.lean;
@@ -309,8 +310,10 @@ export class Motorcycle {
       this.wheels[index].quaternion.copy(transform.quaternion);
     });
 
+    if (!updateDash) return;
+
     // Dashboard.
-    const { ctx, canvas, texture } = this.model.dash;
+    const { ctx, canvas } = this.model.dash;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.fillStyle = 'rgba(8,12,18,0.82)';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -341,6 +344,7 @@ export class Motorcycle {
 
   /** Place the bike on a parking lot bay, upright and stationary. */
   parkAt(x, z, yaw = 0) {
+    this.home = { x, z, yaw };
     this.chassisBody.position.set(x, groundHeightAt(x, z) + 0.9, z);
     this.chassisBody.quaternion.setFromEuler(0, yaw, 0);
     this.chassisBody.velocity.setZero();
