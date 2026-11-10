@@ -19,6 +19,11 @@ const HANDLED = new Set([
   'ControlRight',
   'AltLeft',
   'AltRight',
+  'Tab',
+  'KeyF',
+  'KeyV',
+  'KeyR',
+  'KeyC',
 ]);
 
 export function initInput() {

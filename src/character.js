@@ -66,6 +66,7 @@ export function createPerson({
 
   const arms = [];
   const hands = [];
+  const handMeshes = [];
   for (const side of [-1, 1]) {
     const shoulder = new THREE.Group();
     shoulder.position.set(side * 0.27, 0.42, 0);
@@ -82,6 +83,7 @@ export function createPerson({
 
     arms.push(shoulder);
     hands.push(elbow);
+    handMeshes.push(hand);
   }
 
   const legs = [];
@@ -116,7 +118,16 @@ export function createPerson({
     head,
     arms,
     hands,
+    handMeshes,
     legs,
+    materials: {
+      skin: skinM,
+      shirt: shirtM,
+      pants: pantsM,
+      hair: hairM,
+      shoes: shoeM,
+      jacket: jacketM,
+    },
     anim: {
       phase: 0,
       speed: 0,
@@ -134,7 +145,10 @@ const damp = (current, target, dt, rate = 10) => current + (target - current) * 
  * stride, arm swing and body lean all scale from it, so the motion blends
  * smoothly instead of snapping between poses.
  */
-export function animatePerson(rig, { dt = 1 / 60, speed = 0, crouch = false, seated = false } = {}) {
+export function animatePerson(
+  rig,
+  { dt = 1 / 60, speed = 0, crouch = false, seated = false, driving = false, aiming = false, riding = false } = {}
+) {
   const a = rig.anim;
   a.speed = damp(a.speed, speed, dt, 9);
   a.crouch = damp(a.crouch, crouch ? 1 : 0, dt, 8);
@@ -142,7 +156,8 @@ export function animatePerson(rig, { dt = 1 / 60, speed = 0, crouch = false, sea
   if (seated) {
     rig.hips.position.y = damp(rig.hips.position.y, HIP_HEIGHT - 0.1, dt, 10);
     rig.hips.rotation.x = damp(rig.hips.rotation.x, 0, dt, 8);
-    rig.torso.rotation.x = damp(rig.torso.rotation.x, 0.06, dt, 8);
+    // Hands on the wheel: torso leans in, both arms reach forward and inward.
+    rig.torso.rotation.x = damp(rig.torso.rotation.x, driving ? 0.12 : 0.06, dt, 8);
     rig.torso.rotation.y = damp(rig.torso.rotation.y, 0, dt, 8);
     for (const leg of rig.legs) {
       // Thighs forward, shins hanging down: knees bend backwards, never forwards.
@@ -151,10 +166,51 @@ export function animatePerson(rig, { dt = 1 / 60, speed = 0, crouch = false, sea
       leg.ankle.rotation.x = damp(leg.ankle.rotation.x, 0.18, dt, 10);
       leg.hip.rotation.z = damp(leg.hip.rotation.z, 0, dt, 10);
     }
-    for (const arm of rig.arms) arm.rotation.x = damp(arm.rotation.x, 0.92, dt, 10);
-    for (const elbow of rig.hands) elbow.rotation.x = damp(elbow.rotation.x, -0.26, dt, 10);
-    for (const arm of rig.arms) arm.rotation.z = damp(arm.rotation.z, 0.12, dt, 10);
+    const armX = driving ? 1.34 : 0.92;
+    const elbowX = driving ? -0.52 : -0.26;
+    rig.arms.forEach((arm) => {
+      arm.rotation.x = damp(arm.rotation.x, armX, dt, 10);
+    });
+    rig.hands.forEach((elbow) => {
+      elbow.rotation.x = damp(elbow.rotation.x, elbowX, dt, 10);
+    });
+    rig.arms[0].rotation.z = damp(rig.arms[0].rotation.z, driving ? 0.3 : 0.12, dt, 10);
+    rig.arms[1].rotation.z = damp(rig.arms[1].rotation.z, driving ? -0.3 : 0.12, dt, 10);
     rig.head.rotation.x = damp(rig.head.rotation.x, 0, dt, 10);
+    return;
+  }
+
+  if (riding) {
+    // Crouched over the tank, arms out to the bars, knees tucked in.
+    rig.hips.position.y = damp(rig.hips.position.y, HIP_HEIGHT - 0.06, dt, 10);
+    rig.hips.rotation.x = damp(rig.hips.rotation.x, -0.3, dt, 8);
+    rig.torso.rotation.x = damp(rig.torso.rotation.x, 0.62, dt, 9);
+    rig.torso.rotation.y = damp(rig.torso.rotation.y, 0, dt, 9);
+    rig.head.rotation.x = damp(rig.head.rotation.x, -0.5, dt, 9);
+    for (const leg of rig.legs) {
+      leg.hip.rotation.x = damp(leg.hip.rotation.x, 1.15, dt, 10);
+      leg.knee.rotation.x = damp(leg.knee.rotation.x, -1.5, dt, 10);
+      leg.hip.rotation.z = damp(leg.hip.rotation.z, leg === rig.legs[0] ? 0.34 : -0.34, dt, 10);
+    }
+    rig.arms.forEach((arm, index) => {
+      arm.rotation.x = damp(arm.rotation.x, 1.28, dt, 11);
+      arm.rotation.z = damp(arm.rotation.z, index === 0 ? 0.34 : -0.34, dt, 11);
+    });
+    rig.hands.forEach((elbow) => {
+      elbow.rotation.x = damp(elbow.rotation.x, -0.42, dt, 11);
+    });
+    return;
+  }
+
+  if (aiming) {
+    // Both arms out in front, right hand on the grip, left supporting.
+    rig.arms[1].rotation.x = damp(rig.arms[1].rotation.x, 1.42, dt, 13);
+    rig.hands[1].rotation.x = damp(rig.hands[1].rotation.x, -0.06, dt, 13);
+    rig.arms[1].rotation.z = damp(rig.arms[1].rotation.z, -0.1, dt, 13);
+    rig.arms[0].rotation.x = damp(rig.arms[0].rotation.x, 1.32, dt, 13);
+    rig.hands[0].rotation.x = damp(rig.hands[0].rotation.x, -0.52, dt, 13);
+    rig.arms[0].rotation.z = damp(rig.arms[0].rotation.z, 0.42, dt, 13);
+    rig.torso.rotation.y = damp(rig.torso.rotation.y, 0.16, dt, 8);
     return;
   }
 

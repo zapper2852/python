@@ -338,6 +338,7 @@ export function createTraffic(scene, car, count = 24, world = null) {
       });
       ai.body.position.set(ai.pos.x, 0.72, ai.pos.z);
       ai.body.quaternion.setFromEuler(0, ai.yaw, 0);
+      ai.body.userData = { traffic: true };
       world.addBody(ai.body);
     }
 
@@ -382,7 +383,8 @@ export function createTraffic(scene, car, count = 24, world = null) {
       advanceCursor(ai);
 
       // --- speed planning --------------------------------------------------
-      let target = pathSpeedLimit(ai);
+      let target = ai.pulledOver ? 0 : pathSpeedLimit(ai);
+      ai.honked = false;
 
       const signal = signalAhead(ai, time);
       if (signal && signal.gap > 0 && signal.gap < STOP_LIMIT) {
@@ -401,6 +403,15 @@ export function createTraffic(scene, car, count = 24, world = null) {
       const lead = findLead(ai);
       if (lead) {
         target = Math.min(target, leaderSpeedLimit(lead.gap, lead.speed));
+        // Sitting behind something stopped — usually the player parked across
+        // the lane — the driver leans on the horn until the way clears.
+        if (lead.speed < 0.7 && lead.gap < 9 && ai.speed < 2.2) {
+          ai.honkTimer = (ai.honkTimer ?? 1.2) - dt;
+          if (ai.honkTimer <= 0) {
+            ai.honked = true;
+            ai.honkTimer = 1.5 + Math.random() * 1.6;
+          }
+        }
       }
 
       target = clamp(target, 0, SPEED_LIMIT);

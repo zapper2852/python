@@ -12,14 +12,19 @@ const FUEL = '#3ddc84';
  * can never be lost.
  */
 export class Minimap {
-  constructor(canvas, { gasStations = [], info = null } = {}) {
+  constructor(canvas, { gasStations = [], info = null, pois = [] } = {}) {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
     this.gasStations = gasStations;
     this.info = info;
+    this.pois = pois;
     this.size = 200;
     this.resize();
     window.addEventListener('resize', () => this.resize());
+  }
+
+  setPois(pois) {
+    this.pois = pois;
   }
 
   resize() {
@@ -31,7 +36,7 @@ export class Minimap {
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
 
-  update({ x, z, heading = 0, traffic = [] }) {
+  update({ x, z, heading = 0, traffic = [], police = [] }) {
     const ctx = this.ctx;
     const size = this.size;
     const c = size / 2;
@@ -136,6 +141,56 @@ export class Minimap {
         ctx.fillText(`${Math.round(distance)}m`, px, py + 12);
       }
     }
+
+    // Jobs, missions, shops, garage and the police station.
+    for (const poi of this.pois) {
+      const dx = (poi.x - x) * scale;
+      const dz = (poi.z - z) * scale;
+      const length = Math.hypot(dx, dz);
+      const clamped = length > inner;
+      const px = clamped && length > 0.001 ? c + (dx / length) * inner : c + dx;
+      const py = clamped && length > 0.001 ? c + (dz / length) * inner : c + dz;
+      ctx.fillStyle = poi.color || '#ffd166';
+      ctx.beginPath();
+      ctx.moveTo(px, py - 4.4);
+      ctx.lineTo(px + 4.4, py);
+      ctx.lineTo(px, py + 4.4);
+      ctx.lineTo(px - 4.4, py);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = '#08131b';
+      ctx.font = 'bold 7px ui-sans-serif, system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(poi.label || '', px, py + 0.4);
+    }
+
+    // Patrol cars and officers.
+    for (const unit of police) {
+      const px = c + (unit.x - x) * scale;
+      const py = c + (unit.z - z) * scale;
+      if (px < 2 || py < 2 || px > size - 2 || py > size - 2) continue;
+      ctx.fillStyle = unit.lights ? '#4d8dff' : 'rgba(120,150,200,0.85)';
+      ctx.beginPath();
+      ctx.arc(px, py, unit.lights ? 3.4 : 2.6, 0, Math.PI * 2);
+      ctx.fill();
+      if (unit.lights) {
+        ctx.strokeStyle = '#ff3b30';
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        ctx.arc(px, py, 5.4, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    }
+
+    // Ring highway outline.
+    ctx.strokeStyle = 'rgba(150,170,190,0.35)';
+    ctx.lineWidth = 2;
+    const ring = 298;
+    const rx0 = c + (-ring - x) * scale;
+    const rz0 = c + (-ring - z) * scale;
+    const span = ring * 2 * scale;
+    ctx.strokeRect(rx0, rz0, span, span);
 
     // Player arrow.
     const angle = Math.atan2(-Math.cos(heading), -Math.sin(heading));

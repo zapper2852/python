@@ -99,6 +99,7 @@ export class CarController {
     this.currentEngineTorque = 0;
     this.brakeRamp = 0;
     this.controlEnabled = true;
+    this.disabled = false;
     this.currentGrip = 1;
     this.gear = 1;
     this.shiftTimer = 0;
@@ -194,7 +195,7 @@ export class CarController {
 
   /** Mirrors `Input.GetAxis("Horizontal"/"Vertical")` for WASD and arrow keys. */
   getInput() {
-    if (!this.controlEnabled) {
+    if (!this.controlEnabled || this.disabled) {
       this.m_horizontalInput = 0;
       this.m_verticalInput = 0;
       return;
@@ -440,6 +441,8 @@ export class CarController {
   get telemetry() {
     return {
       speed: Math.round(this.speedKmh),
+      mph: Math.round(this.speedKmh * 0.621371),
+      rpm: Math.round(this.engineRpm),
       steering: Math.round(this.m_steeringAngle / DEG2RAD),
       torque: Math.round(this.currentEngineTorque),
       brake: Math.round(this.currentBrakeForce),

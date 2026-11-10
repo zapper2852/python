@@ -9,6 +9,8 @@ export const CITY = {
   lane: 3.5,
   blocks: 3,
   curb: 0.12,
+  highway: 298,
+  highwayHalf: 11,
 };
 
 export const EXT = CITY.blocks * CITY.spacing;
@@ -50,6 +52,10 @@ export function onRoad(x, z) {
     if (Math.abs(x - line) <= CITY.roadHalf) return true;
     if (Math.abs(z - line) <= CITY.roadHalf) return true;
   }
+  // Ring highway: two straights in each direction.
+  const ring = CITY.highway;
+  if (Math.abs(Math.abs(x) - ring) <= CITY.highwayHalf) return true;
+  if (Math.abs(Math.abs(z) - ring) <= CITY.highwayHalf) return true;
   return false;
 }
 
@@ -167,6 +173,9 @@ function glassMaterial() {
 
 let colliders = [];
 let gasStations = [];
+let parkingLots = [];
+let policeStation = { x: -42, z: 42 };
+let lampMaterial = null;
 
 /** Registers a solid box so the physics world can be built from the city. */
 function solid(size, position, rotationY = 0) {
@@ -306,7 +315,7 @@ function buildRoadConditions(scene) {
 
 function buildBlockPads(scene) {
   const padMat = new THREE.MeshStandardMaterial({ color: '#9ba1a6', roughness: 0.95 });
-  const walkMat = new THREE.MeshStandardMaterial({ color: '#b4babf', roughness: 0.9 });
+  const walkMat = new THREE.MeshStandardMaterial({ color: '#848b92', roughness: 0.94 });
   const pads = [];
   const walks = [];
 
@@ -394,7 +403,7 @@ function buildBuildingBlock(scene, materials, bounds, rngFn) {
   }
 }
 
-function buildGasStation(scene, bounds, brandColor, rngFn) {
+function buildGasStation(scene, bounds, brandColor, price, rngFn) {
   const cx = (bounds.x0 + bounds.x1) / 2;
   const cz = (bounds.z0 + bounds.z1) / 2;
   const concrete = new THREE.MeshStandardMaterial({ color: '#a8adb1', roughness: 0.92 });
@@ -448,7 +457,7 @@ function buildGasStation(scene, bounds, brandColor, rngFn) {
     addParkedCar(bounds.x0 + 8 + i * 3, bounds.z1 - 16, Math.PI / 2, rngFn);
   }
 
-  gasStations.push({ x: cx - 2, z: cz - 2 });
+  gasStations.push({ x: cx - 2, z: cz - 2, price, brand: brandColor });
 }
 
 function buildParkingLot(scene, bounds, rngFn) {
@@ -459,22 +468,36 @@ function buildParkingLot(scene, bounds, rngFn) {
 
   scene.add(box(asphalt, [bounds.x1 - bounds.x0, 0.05, bounds.z1 - bounds.z0], [cx, CITY.curb, cz]));
 
-  const bayW = 2.7;
+  const bayW = 2.6;
   const bayD = 5.2;
-  const perRow = 8;
+  const perRow = 11;
   const lines = [];
-  for (const rowZ of [cz - 7, cz + 7]) {
+  for (const rowZ of [cz - 8, cz + 8]) {
     for (let i = 0; i <= perRow; i += 1) {
       const x = cx - (perRow * bayW) / 2 + i * bayW;
       lines.push(flatQuad(0.12, bayD, x, rowZ, CITY.curb + 0.06));
     }
     for (let i = 0; i < perRow; i += 1) {
       const x = cx - (perRow * bayW) / 2 + bayW / 2 + i * bayW;
-      if (rngFn() < 0.62) {
-        addParkedCar(x, rowZ + (rowZ < cz ? -bayD : bayD) * 0.5, rowZ < cz ? Math.PI : 0, rngFn);
+      if (rngFn() < 0.7) {
+        // Nose-in parking with a little human variation, not a perfect grid.
+        const backing = rowZ < cz;
+        const jitter = (rngFn() - 0.5) * 0.3;
+        addParkedCar(
+          x + jitter,
+          rowZ + (backing ? -bayD : bayD) * 0.5,
+          (backing ? Math.PI : 0) + jitter,
+          rngFn
+        );
       }
     }
   }
+  parkingLots.push({
+    x: cx,
+    z: cz,
+    bayW,
+    moto: { x: cx - (perRow * bayW) / 2 + bayW * 2.5, z: cz + 8 + bayD * 0.45 },
+  });
   const paintMesh = new THREE.Mesh(mergeGeometries(lines), paint);
   paintMesh.receiveShadow = true;
   scene.add(paintMesh);
@@ -622,6 +645,131 @@ function buildConstruction(scene, bounds, rngFn) {
   }
 }
 
+function signTexture(text, bg, fg) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 128;
+  const g = canvas.getContext('2d');
+  g.fillStyle = bg;
+  g.fillRect(0, 0, canvas.width, canvas.height);
+  g.fillStyle = fg;
+  g.font = 'bold 84px ui-sans-serif, system-ui, sans-serif';
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.fillText(text, canvas.width / 2, canvas.height / 2 + 4);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
+function buildPoliceStation(scene, bounds, rngFn) {
+  const cx = (bounds.x0 + bounds.x1) / 2;
+  const cz = (bounds.z0 + bounds.z1) / 2;
+  const padMat = new THREE.MeshStandardMaterial({ color: '#8f969d', roughness: 0.94 });
+  const wall = new THREE.MeshStandardMaterial({ color: '#59636f', roughness: 0.9 });
+  const trim = new THREE.MeshStandardMaterial({ color: '#e4eaf0', roughness: 0.6 });
+  const blue = new THREE.MeshStandardMaterial({ color: '#123a6b', roughness: 0.5 });
+
+  scene.add(box(padMat, [bounds.x1 - bounds.x0, 0.05, bounds.z1 - bounds.z0], [cx, CITY.curb + 0.01, cz]));
+
+  // Two-storey precinct block.
+  const w = 32;
+  const d = 20;
+  const h = 9;
+  const bz = cz + 9;
+  scene.add(box(wall, [w, h, d], [cx, CITY.curb + h / 2, bz]));
+  solid([w, h, d], [cx, CITY.curb + h / 2, bz]);
+  scene.add(box(trim, [w + 0.7, 0.7, d + 0.7], [cx, CITY.curb + h + 0.2, bz]));
+  scene.add(box(blue, [w + 0.2, 1.1, 0.24], [cx, CITY.curb + 4.4, bz - d / 2 - 0.12]));
+  scene.add(box(glassMaterial(), [11, 3.1, 0.18], [cx, CITY.curb + 1.7, bz - d / 2 - 0.1]));
+
+  const sign = new THREE.Mesh(
+    new THREE.PlaneGeometry(11, 2.7),
+    new THREE.MeshBasicMaterial({ map: signTexture('POLICE', '#0f2f57', '#eaf2ff') })
+  );
+  sign.position.set(cx, CITY.curb + 6.3, bz - d / 2 - 0.2);
+  scene.add(sign);
+
+  // Forecourt bays with cruisers parked nose-out.
+  const paint = new THREE.MeshStandardMaterial({ color: '#e8edf2', roughness: 0.8 });
+  for (let i = 0; i < 4; i += 1) {
+    const x = cx - 12 + i * 7;
+    scene.add(box(paint, [0.14, 0.02, 5.4], [x, CITY.curb + 0.07, bz - d / 2 - 5]));
+  }
+
+  // Flagpole.
+  scene.add(box(trim, [0.14, 7, 0.14], [cx + w / 2 + 3, CITY.curb + 3.5, bz - 2]));
+  solid([0.4, 7, 0.4], [cx + w / 2 + 3, CITY.curb + 3.5, bz - 2]);
+
+  policeStation = { x: cx, z: bz - d / 2 - 6 };
+}
+
+function buildHighway(scene) {
+  const R = CITY.highway;
+  const half = CITY.highwayHalf;
+  const span = R * 2 + half * 2;
+  const geos = [];
+  const marks = [];
+  // Four straights forming the ring.
+  geos.push(flatQuad(half * 2, span, R, 0, 0.03));
+  geos.push(flatQuad(half * 2, span, -R, 0, 0.03));
+  geos.push(flatQuad(span, half * 2, 0, R, 0.03));
+  geos.push(flatQuad(span, half * 2, 0, -R, 0.03));
+
+  for (let s = -R; s <= R; s += 12) {
+    marks.push(flatQuad(0.16, 5, R, s, 0.045));
+    marks.push(flatQuad(0.16, 5, -R, s, 0.045));
+    marks.push(flatQuad(5, 0.16, s, R, 0.045));
+    marks.push(flatQuad(5, 0.16, s, -R, 0.045));
+  }
+
+  const asphalt = new THREE.MeshStandardMaterial({ color: '#34393f', roughness: 0.95 });
+  const road = new THREE.Mesh(mergeGeometries(geos), asphalt);
+  road.receiveShadow = true;
+  scene.add(road);
+
+  const paint = new THREE.MeshStandardMaterial({ color: '#e9ecef', roughness: 0.85 });
+  const marking = new THREE.Mesh(mergeGeometries(marks), paint);
+  marking.receiveShadow = true;
+  scene.add(marking);
+
+  // Guardrail along the outside edge.
+  const railMat = new THREE.MeshStandardMaterial({ color: '#9aa3ab', metalness: 0.7, roughness: 0.4 });
+  const railGeos = [];
+  const edge = R + half + 0.5;
+  const railLength = R * 2 + half * 2 + 2;
+  for (const [x, z, w, d] of [
+    [edge, 0, 0.3, railLength],
+    [-edge, 0, 0.3, railLength],
+    [0, edge, railLength, 0.3],
+    [0, -edge, railLength, 0.3],
+  ]) {
+    const bar = new THREE.BoxGeometry(w, 0.28, d);
+    bar.translate(x, 1.05, z);
+    railGeos.push(bar);
+    const lower = new THREE.BoxGeometry(w, 0.18, d);
+    lower.translate(x, 0.62, z);
+    railGeos.push(lower);
+    solid([w, 1.2, d], [x, 0.65, z]);
+  }
+  const rails = new THREE.Mesh(mergeGeometries(railGeos), railMat);
+  rails.castShadow = true;
+  scene.add(rails);
+
+  // Street lamps spaced along the ring.
+  const poleMat = new THREE.MeshStandardMaterial({ color: '#6b7178', roughness: 0.6, metalness: 0.5 });
+  const heads = [];
+  for (let s = -R + 24; s < R; s += 48) {
+    for (const [x, z] of [[R + half + 1.6, s], [-R - half - 1.6, s], [s, R + half + 1.6], [s, -R - half - 1.6]]) {
+      const pole = new THREE.BoxGeometry(0.24, 7, 0.24);
+      pole.translate(x, 3.5, z);
+      heads.push(pole);
+    }
+  }
+  const poles = new THREE.Mesh(mergeGeometries(heads), poleMat);
+  scene.add(poles);
+}
+
 function buildStreetFurniture(scene) {
   const poleMat = new THREE.MeshStandardMaterial({ color: '#6b7178', roughness: 0.6, metalness: 0.5 });
   const headMat = new THREE.MeshStandardMaterial({
@@ -671,6 +819,7 @@ function buildStreetFurniture(scene) {
       addTree(px0 + 1.8, pz1 - 1.8, 0.85);
     }
   }
+  return headMat;
 }
 
 // --- traffic signals -------------------------------------------------------
@@ -792,6 +941,7 @@ export function buildCity(scene) {
   colliders = [];
   gasStations = [];
   parkedCars = [];
+  parkingLots = [];
   treeTrunks = [];
   treeCrowns = [];
   const random = rng(20261109);
@@ -817,13 +967,16 @@ export function buildCity(scene) {
     ['2,-2', 'park'],
     ['1,1', 'construction'],
     ['-2,-2', 'plaza'],
+    ['-1,0', 'police'],
   ]);
 
   for (let i = -CITY.blocks; i < CITY.blocks; i += 1) {
     for (let j = -CITY.blocks; j < CITY.blocks; j += 1) {
       const bounds = blockBounds(i, j);
       const kind = special.get(`${i},${j}`);
-      if (kind === 'gas') buildGasStation(scene, bounds, j > 0 ? '#1f6fb2' : '#c0392b', random);
+      const price = gasStations.length === 0 ? 1.32 : 1.19;
+      if (kind === 'gas') buildGasStation(scene, bounds, j > 0 ? '#1f6fb2' : '#c0392b', price, random);
+      else if (kind === 'police') buildPoliceStation(scene, bounds, random);
       else if (kind === 'parking') buildParkingLot(scene, bounds, random);
       else if (kind === 'park') buildPark(scene, bounds, random);
       else if (kind === 'plaza') buildPlaza(scene, bounds, random);
@@ -832,10 +985,11 @@ export function buildCity(scene) {
     }
   }
 
-  buildStreetFurniture(scene);
+  buildHighway(scene);
+  lampMaterial = buildStreetFurniture(scene);
   mergeTrees(scene);
   mergeParkedCars(scene);
   const signals = buildSignals(scene);
 
-  return { colliders, gasStations, signals };
+  return { colliders, gasStations, signals, lampMaterial, policeStation, parkingLots };
 }

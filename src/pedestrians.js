@@ -61,8 +61,14 @@ export function createPedestrians(scene, count = 20) {
 
   const toPlayer = new THREE.Vector2();
 
+  function kill(ped) {
+    ped.down = true;
+    ped.rig.root.visible = false;
+  }
+
   function update(dt, playerPosition) {
     for (const ped of peds) {
+      if (ped.down) continue;
       const target = ped.loop[ped.corner];
       const dx = target.x - ped.pos.x;
       const dz = target.y - ped.pos.y;
@@ -102,5 +108,5 @@ export function createPedestrians(scene, count = 20) {
     }
   }
 
-  return { peds, update };
+  return { peds, update, kill };
 }

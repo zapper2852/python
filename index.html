@@ -16,7 +16,7 @@
     <div id="hud" aria-live="polite">
       <div class="speed">
         <span id="speed-value">0</span>
-        <span class="unit">km/h</span>
+        <span class="unit">mph</span>
       </div>
 
       <dl class="telemetry">
@@ -26,7 +26,21 @@
         <div><dt>Brake torque</dt><dd><span id="brake-value">0</span> Nm</dd></div>
       </dl>
 
-      <p class="drive">Automatic 6-speed · rear-wheel drive</p>
+      <p class="drive" id="vehicle-line">Automatic 6-speed · rear-wheel drive</p>
+    </div>
+
+    <div id="status">
+      <div class="status-row">
+        <span id="cash">$0</span>
+        <span id="clock">06:00</span>
+      </div>
+      <div class="bar health"><span id="health-fill"></span></div>
+      <div class="bar fuel"><span id="fuel-fill"></span></div>
+      <div class="status-row small">
+        <span id="fuel-text">Fuel 0.0 L</span>
+        <span id="price-text"></span>
+      </div>
+      <div id="wanted"></div>
     </div>
 
     <div id="minimap-panel">
@@ -35,11 +49,38 @@
       <div class="minimap-key"><span class="fuel-dot"></span> Gas station</div>
     </div>
 
+    <div id="objective"></div>
+    <div id="prompt"></div>
+    <div id="toasts"></div>
+
+    <div id="weapon-hud">
+      <span id="weapon-name">Fists</span>
+      <span id="weapon-ammo">—</span>
+    </div>
+
     <div id="controls">
       <p><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> — drive / walk</p>
-      <p><kbd>Alt</kbd> — exit / enter car · <kbd>Shift</kbd> sprint · <kbd>Ctrl</kbd> crouch</p>
-      <p><kbd>Space</kbd> — handbrake · <kbd>R</kbd> — reset · <kbd>Q</kbd><kbd>E</kbd> — look around on foot</p>
-      <p><kbd>C</kbd> — camera view (chase / cockpit)</p>
+      <p><kbd>Alt</kbd> — exit / enter car · <kbd>E</kbd> — interact / refuel / job</p>
+      <p><kbd>Shift</kbd> sprint · <kbd>Ctrl</kbd> crouch · <kbd>Space</kbd> handbrake / wheelie</p>
+      <p><kbd>Tab</kbd> weapons · <kbd>Click</kbd> shoot · <kbd>F</kbd> reload · <kbd>V</kbd> punch</p>
+      <p><kbd>C</kbd> camera · <kbd>R</kbd> respawn · <kbd>Q</kbd><kbd>E</kbd> look on foot</p>
+    </div>
+
+    <div id="shop" class="panel hidden">
+      <h2>Weapon store</h2>
+      <div id="shop-items"></div>
+      <p class="panel-hint"><kbd>E</kbd> or click to buy · <kbd>Esc</kbd> to leave</p>
+    </div>
+
+    <div id="weapon-wheel" class="hidden">
+      <div id="wheel-ring"></div>
+      <p class="panel-hint">Move the mouse to pick · release <kbd>Tab</kbd> to equip</p>
+    </div>
+
+    <div id="jail" class="hidden">
+      <h2>Booked</h2>
+      <p>Processing at the precinct…</p>
+      <p id="jail-timer">12</p>
     </div>
 
     <script type="module" src="/src/main.js"></script>

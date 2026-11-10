@@ -144,9 +144,13 @@ function buildExterior(root, m) {
     );
   }
 
-  root.add(panel(m.glass, { z1: -0.78, y1: 0.845, z2: -0.06, y2: 1.33, width: 1.4 }));
+  // Windscreen sits inside the cowl and pillar line so it never pokes out
+  // through the front of the body.
+  const windshield = panel(m.glass, { z1: -0.74, y1: 0.8, z2: -0.05, y2: 1.29, width: 1.34 });
+  root.add(windshield);
   root.add(panel(m.glass, { z1: 1.02, y1: 1.33, z2: 1.57, y2: 0.885, width: 1.4 }));
 
+  const doors = [];
   for (const side of [-1, 1]) {
     // Side glass sits inside the pillars and above the beltline so it never
     // pokes out through the door skin.
@@ -154,13 +158,27 @@ function buildExterior(root, m) {
     root.add(box(m.glass, [0.02, 0.42, 0.56], [side * 0.735, 1.08, 0.7]));
     root.add(box(m.trim, [0.025, 0.44, 0.06], [side * 0.737, 1.08, 0.33]));
 
-    // Door and quarter-panel skins close the notched cabin.
-    root.add(box(m.paint, [0.05, 0.435, 2.26], [side * 0.77, 0.6375, 0.38]));
-    root.add(box(m.paint, [0.032, 0.03, 2.26], [side * 0.786, 0.838, 0.38]));
+    if (side === 1) {
+      // Driver door swings on a hinge at its leading edge, so it can open and
+      // close during the entry animation.
+      const pivot = new THREE.Group();
+      pivot.position.set(0.77, 0, -0.75);
+      pivot.add(box(m.paint, [0.05, 0.435, 2.26], [0, 0.6375, 1.13]));
+      pivot.add(box(m.paint, [0.032, 0.03, 2.26], [0.016, 0.838, 1.13]));
+      pivot.add(box(m.trim, [0.015, 0.02, 1.42], [0.033, 0.62, 1.1]));
+      pivot.add(box(m.chrome, [0.03, 0.05, 0.16], [0.038, 0.78, 0.87]));
+      pivot.add(box(m.glass, [0.02, 0.44, 1.0], [-0.035, 1.08, 0.53]));
+      root.add(pivot);
+      doors.push(pivot);
+    } else {
+      // Door and quarter-panel skins close the notched cabin.
+      root.add(box(m.paint, [0.05, 0.435, 2.26], [side * 0.77, 0.6375, 0.38]));
+      root.add(box(m.paint, [0.032, 0.03, 2.26], [side * 0.786, 0.838, 0.38]));
 
-    // door shut line + handle
-    root.add(box(m.trim, [0.015, 0.02, 1.42], [side * 0.803, 0.62, 0.35]));
-    root.add(box(m.chrome, [0.03, 0.05, 0.16], [side * 0.808, 0.78, 0.12]));
+      // door shut line + handle
+      root.add(box(m.trim, [0.015, 0.02, 1.42], [side * 0.803, 0.62, 0.35]));
+      root.add(box(m.chrome, [0.03, 0.05, 0.16], [side * 0.808, 0.78, 0.12]));
+    }
     // mirror
     root.add(box(m.trim, [0.1, 0.06, 0.08], [side * 0.86, 0.92, -0.62]));
     root.add(box(m.chrome, [0.06, 0.1, 0.16], [side * 0.93, 0.94, -0.6]));
@@ -177,9 +195,17 @@ function buildExterior(root, m) {
       root.add(box(m.trim, [0.1, 0.34, 1.0], [side * 0.79, 0.36, z]));
     }
   }
-  root.add(box(m.trim, [1.5, 0.16, 0.14], [0, 0.34, -2.1])); // front lip
-  root.add(box(m.trim, [1.44, 0.12, 0.1], [0, 0.72, -2.2])); // grille
-  root.add(box(m.trim, [1.4, 0.14, 0.12], [0, 0.4, 2.1])); // rear diffuser
+  // Bumpers live in their own groups so crash damage can bend them and tear
+  // them off without touching the rest of the shell.
+  const frontBumper = new THREE.Group();
+  frontBumper.add(box(m.trim, [1.5, 0.16, 0.14], [0, 0.34, -2.1])); // front lip
+  frontBumper.add(box(m.trim, [1.44, 0.12, 0.1], [0, 0.72, -2.2])); // grille
+  root.add(frontBumper);
+
+  const rearBumper = new THREE.Group();
+  rearBumper.add(box(m.trim, [1.4, 0.14, 0.12], [0, 0.4, 2.1])); // rear diffuser
+  rearBumper.add(box(m.chrome, [0.34, 0.12, 0.03], [0, 0.5, 2.11])); // plate
+  root.add(rearBumper);
 
   // Lights.
   for (const side of [-1, 1]) {
@@ -188,8 +214,16 @@ function buildExterior(root, m) {
     root.add(box(m.taillight, [0.44, 0.1, 0.08], [side * 0.5, 0.74, 2.09]));
   }
 
-  // Plate and exhausts.
-  root.add(box(m.chrome, [0.34, 0.12, 0.03], [0, 0.5, 2.11]));
+  // Headlight beams, switched on with the daylight cycle.
+  const headlights = [];
+  for (const side of [-1, 1]) {
+    const beam = new THREE.SpotLight('#fff2d0', 0, 90, 0.34, 0.55, 1.1);
+    beam.position.set(side * 0.5, 0.66, -2.0);
+    beam.target.position.set(side * 0.5, -0.7, -30);
+    root.add(beam);
+    root.add(beam.target);
+    headlights.push(beam);
+  }
   for (const side of [-1, 1]) {
     const pipe = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.12, 12), m.chrome);
     pipe.rotation.x = Math.PI / 2;
@@ -197,7 +231,15 @@ function buildExterior(root, m) {
     root.add(pipe);
   }
 
-  return { taillights: m.taillight };
+  return {
+    taillights: m.taillight,
+    headlightMaterial: m.headlight,
+    shell,
+    windshield,
+    bumpers: { front: frontBumper, rear: rearBumper },
+    headlights,
+    doors,
+  };
 }
 
 export function createCarModel() {
@@ -219,6 +261,15 @@ export function createCarModel() {
     steeringWheel: interior.steeringWheel,
     /** Driver eye point, in car space (y = 0 on the road). */
     driverEye: new THREE.Vector3(0.34, 1.16, 0.12),
+    shell: exterior.shell,
+    windshield: exterior.windshield,
+    bumpers: exterior.bumpers,
+    headlights: exterior.headlights,
+    headlightMaterial: exterior.headlightMaterial,
+    doors: exterior.doors,
+    setDoor(open) {
+      for (const door of exterior.doors) door.rotation.y = -open * 1.05;
+    },
     setBrakeLights(on) {
       exterior.taillights.emissiveIntensity = on ? 3.2 : 0.55;
     },
