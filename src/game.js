@@ -10,14 +10,15 @@ export const FUEL_CAPACITY = 55; // litres
 export class Game {
   constructor() {
     this.money = 480;
+    this.bank = 1200; // savings held at the bank
     this.maxHealth = 150;
     this.health = 150;
     this.wanted = 0; // 0..5 stars
     this.heat = 0; // seconds since the last crime
     this.fuel = 38; // litres in the tank
     this.inventory = ['pistol'];
-    this.mag = { pistol: 15, rifle: 0 };
-    this.reserve = { pistol: 45, rifle: 0 };
+    this.mag = { pistol: 15, rifle: 0, carbine: 0 };
+    this.reserve = { pistol: 45, rifle: 0, carbine: 0 };
     this.jailed = false;
     this.ownedGuns = { pistol: 1 };
     this.listeners = new Set();
@@ -59,6 +60,34 @@ export class Game {
     this.notify(`+$${Math.round(amount)} ${reason}`.trim(), 'good');
   }
 
+  /** Moves cash off the street and into the bank account. */
+  deposit(amount) {
+    const value = Math.min(Math.max(0, Math.floor(amount)), Math.floor(this.money));
+    if (value <= 0) {
+      this.notify('No cash to deposit', 'warn');
+      return 0;
+    }
+    this.money -= value;
+    this.bank += value;
+    this.emit('money', { amount: -value, reason: 'deposit' });
+    this.notify(`Deposited $${value}`, 'good');
+    return value;
+  }
+
+  /** Takes money back out of the bank account. */
+  withdraw(amount) {
+    const value = Math.min(Math.max(0, Math.floor(amount)), Math.floor(this.bank));
+    if (value <= 0) {
+      this.notify('Nothing left to withdraw', 'warn');
+      return 0;
+    }
+    this.bank -= value;
+    this.money += value;
+    this.emit('money', { amount: value, reason: 'withdrawal' });
+    this.notify(`Withdrew $${value}`, 'good');
+    return value;
+  }
+
   damage(amount) {
     if (this.jailed) return;
     this.health = Math.max(0, this.health - amount);
@@ -85,6 +114,7 @@ export class Game {
         shooting: 'Shots fired',
         civilian: 'Civilian down',
         theft: 'Grand theft auto',
+        robbery: 'Armed robbery',
       }[type] || 'Crime';
       this.notify(`Wanted: ${label}`, 'warn');
     }

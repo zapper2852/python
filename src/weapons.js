@@ -41,6 +41,18 @@ export const WEAPONS = {
     auto: true,
     price: 850,
   },
+  carbine: {
+    id: 'carbine',
+    name: 'Semi-auto rifle',
+    damage: 34,
+    interval: 0.19,
+    mag: 20,
+    reload: 2.1,
+    range: 205,
+    spread: 0.015,
+    auto: false,
+    price: 720,
+  },
 };
 
 const gunCache = new Map();
@@ -66,6 +78,15 @@ export function createWeaponMesh(id) {
     add([0.06, 0.09, 0.2], [0, -0.02, 0.2]);
     add([0.055, 0.055, 0.16], [0, 0.05, 0.06]);
     add([0.03, 0.06, 0.05], [0, 0.09, -0.36], steel);
+  } else if (id === 'carbine') {
+    // Short, optic-topped semi-auto: slimmer receiver, handguard and a red dot.
+    add([0.05, 0.068, 0.5], [0, 0, -0.12]);
+    add([0.036, 0.036, 0.26], [0, 0.004, -0.44], steel);
+    add([0.046, 0.14, 0.1], [0, -0.1, 0.07]);
+    add([0.055, 0.085, 0.17], [0, -0.015, 0.19]);
+    add([0.04, 0.075, 0.11], [0, -0.1, -0.06]);
+    add([0.03, 0.03, 0.14], [0, 0.062, -0.12], steel);
+    add([0.045, 0.045, 0.05], [0, 0.098, -0.12], steel);
   } else {
     add([0.05, 0.07, 0.26], [0, 0, -0.06]);
     add([0.036, 0.036, 0.12], [0, 0.012, -0.22], steel);
@@ -165,7 +186,7 @@ export class Weapons {
 
     const hit = hitTest(origin, dir, def.range);
     this.audio.gunshot(def.id);
-    this.spawnTracer(origin, dir, hit ? hit.distance : def.range, def.id === 'rifle');
+    this.spawnTracer(origin, dir, hit ? hit.distance : def.range, def.id !== 'pistol');
     this.game.emit('shot', { hit, weapon: def.id });
     return { fired: true, hit };
   }

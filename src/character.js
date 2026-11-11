@@ -202,18 +202,6 @@ export function animatePerson(
     return;
   }
 
-  if (aiming) {
-    // Both arms out in front, right hand on the grip, left supporting.
-    rig.arms[1].rotation.x = damp(rig.arms[1].rotation.x, 1.42, dt, 13);
-    rig.hands[1].rotation.x = damp(rig.hands[1].rotation.x, -0.06, dt, 13);
-    rig.arms[1].rotation.z = damp(rig.arms[1].rotation.z, -0.1, dt, 13);
-    rig.arms[0].rotation.x = damp(rig.arms[0].rotation.x, 1.32, dt, 13);
-    rig.hands[0].rotation.x = damp(rig.hands[0].rotation.x, -0.52, dt, 13);
-    rig.arms[0].rotation.z = damp(rig.arms[0].rotation.z, 0.42, dt, 13);
-    rig.torso.rotation.y = damp(rig.torso.rotation.y, 0.16, dt, 8);
-    return;
-  }
-
   const moving = a.speed > 0.05;
   const stride = Math.min(a.speed / 1.6, 2.3);
   a.phase += a.speed * dt * 2.9;
@@ -245,6 +233,36 @@ export function animatePerson(
   const hipY = HIP_HEIGHT - a.crouch * 0.34 - bob;
   rig.hips.position.y = damp(rig.hips.position.y, hipY, dt, 14);
 
+  // Lean into the run, counter-rotate the torso, keep the idle pose alive.
+  a.lean = damp(
+    a.lean,
+    Math.min(a.speed / 8, 1) * 0.14 + a.crouch * 0.2 + (aiming ? 0.05 : 0),
+    dt,
+    6
+  );
+  const twist = moving ? Math.sin(p) * 0.06 * Math.min(stride, 1.4) : 0;
+  rig.torso.rotation.x = a.lean;
+
+  if (aiming) {
+    // Weapon up: the walk cycle above still drives the legs, hips and bob, so
+    // the character keeps a real gait while both hands stay on the gun. The
+    // arms ride the stride with a small counter-sway instead of freezing.
+    const sway = Math.sin(p) * Math.min(stride, 1.4);
+    const breathe = Math.sin(performance.now() * 0.0018) * 0.012;
+    rig.torso.rotation.y = damp(rig.torso.rotation.y, 0.16 - twist * 0.4, dt, 8);
+    rig.torso.rotation.z = damp(rig.torso.rotation.z, moving ? -Math.sin(p) * 0.02 : 0, dt, 8);
+    rig.arms[1].rotation.x = damp(rig.arms[1].rotation.x, 1.4 + sway * 0.035 + breathe, dt, 12);
+    rig.hands[1].rotation.x = damp(rig.hands[1].rotation.x, -0.06, dt, 12);
+    rig.arms[1].rotation.z = damp(rig.arms[1].rotation.z, -0.12, dt, 12);
+    rig.arms[0].rotation.x = damp(rig.arms[0].rotation.x, 1.26 + sway * 0.03 + breathe, dt, 12);
+    rig.hands[0].rotation.x = damp(rig.hands[0].rotation.x, -0.5, dt, 12);
+    rig.arms[0].rotation.z = damp(rig.arms[0].rotation.z, 0.44, dt, 12);
+    rig.head.rotation.x = damp(rig.head.rotation.x, -a.lean * 0.5 - 0.05, dt, 8);
+    rig.head.rotation.y = damp(rig.head.rotation.y, twist * 0.3, dt, 8);
+    rig.head.rotation.z = damp(rig.head.rotation.z, moving ? Math.sin(p) * 0.02 : 0, dt, 8);
+    return;
+  }
+
   const armSwing = swing * 0.85;
   rig.arms[0].rotation.x = -armSwing - 0.04 + a.crouch * 0.32;
   rig.arms[1].rotation.x = armSwing - 0.04 + a.crouch * 0.32;
@@ -253,10 +271,7 @@ export function animatePerson(
   rig.hands[0].rotation.x = moving ? 0.16 + Math.max(0, -Math.sin(p)) * 0.45 : 0.12;
   rig.hands[1].rotation.x = moving ? 0.16 + Math.max(0, Math.sin(p)) * 0.45 : 0.12;
 
-  // Lean into the run, counter-rotate the torso, keep the idle pose alive.
-  a.lean = damp(a.lean, Math.min(a.speed / 8, 1) * 0.14 + a.crouch * 0.2, dt, 6);
-  rig.torso.rotation.x = a.lean;
-  rig.torso.rotation.y = moving ? Math.sin(p) * 0.06 * Math.min(stride, 1.4) : 0;
+  rig.torso.rotation.y = twist;
   rig.torso.rotation.z = moving
     ? Math.sin(p) * 0.04
     : Math.sin(performance.now() * 0.0012) * 0.012;

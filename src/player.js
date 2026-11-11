@@ -175,20 +175,50 @@ export class Player {
   }
 
   // --- vehicles -------------------------------------------------------------
+  /**
+   * Climb in: from wherever the character is standing, step to the open door,
+   * fold into the seat, then shut the door behind them. Nothing snaps.
+   */
   playEnterCar(car) {
     this.driving = true;
     this.mode = 'car';
     this.car = car;
     this.velocity.set(0, 0, 0);
+
+    const worldStart = new THREE.Vector3();
+    this.group.getWorldPosition(worldStart);
     this.group.removeFromParent();
     car.chassisGroup.add(this.group);
+
+    // Car-local copy of the standing position, clamped to a couple of paces so
+    // the entry reads as a step in rather than a skate across the street.
+    const body = car.chassisBody;
+    const inverse = new THREE.Quaternion(
+      -body.quaternion.x,
+      -body.quaternion.y,
+      -body.quaternion.z,
+      body.quaternion.w
+    ).normalize();
+    const start = worldStart
+      .clone()
+      .sub(new THREE.Vector3(body.position.x, body.position.y, body.position.z))
+      .applyQuaternion(inverse);
+    start.y = groundHeightAt(body.position.x, body.position.z) - body.position.y;
+    const offset = new THREE.Vector2(start.x - 0.35, start.z - 0.15);
+    if (offset.length() > 2.4) offset.setLength(2.4);
+    start.set(0.35 + offset.x, start.y, 0.15 + offset.y);
+
+    const seat = new THREE.Vector3(0.35, -0.78, 0.15);
+    const door = new THREE.Vector3(1.5, start.y + (seat.y - start.y) * 0.4, 0.2);
+
     this.group.visible = true;
-    this.group.scale.setScalar(0.75);
-    this.group.position.set(1.55, -0.78, 0.2);
+    this.group.scale.setScalar(1);
+    this.group.position.copy(start);
     this.group.rotation.set(0, Math.PI / 2, 0);
+
     this.rig.anim.speed = 0;
     car.model.setDoor(0);
-    this.entry = { car, phase: 'open', timer: 0.34, from: this.group.position.clone() };
+    this.entry = { car, phase: 'approach', timer: 0.45, duration: 0.45, start, door, seat };
     this.setOutfit('casual');
     this.helmetTarget = 0;
   }
@@ -309,36 +339,67 @@ export class Player {
 
   // --- updates --------------------------------------------------------------
   updateSeated(dt, { driving = true } = {}) {
-    if (this.entry) {
-      this.entry.timer -= dt;
-      const car = this.entry.car;
-      if (this.entry.phase === 'open') {
-        car.model.setDoor(1 - Math.max(0, this.entry.timer) / 0.34);
-        if (this.entry.timer <= 0) {
-          this.entry.phase = 'slide';
-          this.entry.timer = 0.55;
-        }
-      } else if (this.entry.phase === 'slide') {
-        const t = 1 - Math.max(0, this.entry.timer) / 0.55;
-        this.group.position.lerpVectors(this.entry.from, new THREE.Vector3(0.35, -0.78, 0.15), t);
-        this.group.rotation.y = (1 - t) * (Math.PI / 2);
-        if (this.entry.timer <= 0) {
-          this.entry.phase = 'close';
-          this.entry.timer = 0.34;
-          this.group.position.set(0.35, -0.78, 0.15);
-          this.group.rotation.set(0, 0, 0);
-        }
-      } else if (this.entry.phase === 'close') {
-        car.model.setDoor(Math.max(0, this.entry.timer) / 0.34);
-        if (this.entry.timer <= 0) {
-          car.model.setDoor(0);
-          this.entry = null;
-        }
+    const phase = this.entry ? this.entry.phase : 'seated';
+    if (this.entry) this.updateEntry(dt);
+
+    if (phase === 'approach') {
+      // Walking up to the open door: let the walk cycle drive the legs.
+      animatePerson(this.rig, { dt, speed: 1.15 });
+    } else if (phase === 'enter') {
+      // Legs fold into the seat while the body swings in through the door.
+      animatePerson(this.rig, { dt, seated: true, driving: false });
+    } else {
+      animatePerson(this.rig, { dt, seated: true, driving });
+    }
+    this.applyWeaponPose(dt);
+  }
+
+  updateEntry(dt) {
+    const entry = this.entry;
+    const car = entry.car;
+    entry.timer -= dt;
+    const t = Math.min(1, 1 - Math.max(0, entry.timer) / entry.duration);
+    const ease = t * t * (3 - 2 * t);
+
+    if (entry.phase === 'approach') {
+      car.model.setDoor(Math.min(1, t * 1.5));
+      this.group.position.lerpVectors(entry.start, entry.door, ease);
+      this.group.scale.setScalar(1 - t * 0.12);
+      this.group.rotation.set(0, Math.PI / 2 - ease * 0.3, 0);
+      if (entry.timer <= 0) {
+        entry.phase = 'enter';
+        entry.timer = 0.55;
+        entry.duration = 0.55;
       }
+      return;
     }
 
-    animatePerson(this.rig, { dt, seated: true, driving: !this.entry || this.entry.phase === 'close' });
-    this.applyWeaponPose(dt);
+    if (entry.phase === 'enter') {
+      car.model.setDoor(1);
+      this.group.position.lerpVectors(entry.door, entry.seat, ease);
+      this.group.scale.setScalar(0.88 - t * 0.13);
+      this.group.rotation.set(
+        -0.24 * Math.sin(ease * Math.PI),
+        (1 - ease) * (Math.PI / 2 - 0.3),
+        0
+      );
+      if (entry.timer <= 0) {
+        entry.phase = 'settle';
+        entry.timer = 0.34;
+        entry.duration = 0.34;
+        this.group.position.copy(entry.seat);
+        this.group.rotation.set(0, 0, 0);
+        this.group.scale.setScalar(0.75);
+      }
+      return;
+    }
+
+    // Settle into the seat and swing the door shut.
+    car.model.setDoor(Math.max(0, entry.timer) / entry.duration);
+    if (entry.timer <= 0) {
+      car.model.setDoor(0);
+      this.entry = null;
+    }
   }
 
   updateRider(dt) {

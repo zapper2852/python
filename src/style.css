@@ -409,6 +409,207 @@ kbd {
   cursor: default;
 }
 
+/* --- casino / bank venue panel ------------------------------------------- */
+#venue {
+  width: min(560px, 92vw);
+  max-height: 84vh;
+  overflow-y: auto;
+}
+
+.venue-blurb {
+  margin: 0 0 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.venue-label {
+  margin: 10px 0 4px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.venue-stat {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font: 500 12px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.venue-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  margin: 6px 0;
+}
+
+.venue-button,
+.venue-chip {
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--ink);
+  font: 600 12px/1.2 ui-sans-serif, system-ui, sans-serif;
+  cursor: pointer;
+}
+
+.venue-chip {
+  padding: 6px 10px;
+  font-weight: 500;
+}
+
+.venue-button:hover,
+.venue-chip:hover {
+  background: rgba(255, 255, 255, 0.11);
+}
+
+.venue-button:disabled,
+.venue-chip:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.venue-chip.active {
+  background: #ffd166;
+  border-color: #ffd166;
+  color: #0b1117;
+}
+
+.venue-result {
+  margin: 8px 0;
+  font: 600 13px/1.5 ui-sans-serif, system-ui, sans-serif;
+  color: var(--ink);
+}
+
+.venue-result.good {
+  color: #9ce8bd;
+}
+
+.venue-result.bad {
+  color: #ffb3a3;
+}
+
+.venue-cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin: 4px 0 8px;
+}
+
+.card {
+  position: relative;
+  width: 54px;
+  height: 76px;
+  border-radius: 8px;
+  background: #f4f1ea;
+  color: #1a1a1a;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.35);
+  transition: transform 0.12s ease, outline-color 0.12s ease;
+  outline: 2px solid transparent;
+}
+
+.card.red {
+  color: #c0392b;
+}
+
+.card.held {
+  outline-color: #ffd166;
+  transform: translateY(-6px);
+}
+
+.card.back {
+  background: repeating-linear-gradient(45deg, #24384f, #24384f 5px, #1a2a3c 5px, #1a2a3c 10px);
+}
+
+.card-rank {
+  font: 700 20px/1 ui-sans-serif, system-ui, sans-serif;
+}
+
+.card-suit {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.roulette-wheel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 6px 0 12px;
+}
+
+.roulette-number {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 78px;
+  height: 78px;
+  border-radius: 50%;
+  border: 3px solid rgba(255, 255, 255, 0.18);
+  font: 700 30px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: #0b1117;
+  background: #d7dee6;
+}
+
+.roulette-number.red {
+  background: #d4473c;
+  color: #fff6f2;
+}
+
+.roulette-number.black {
+  background: #23272e;
+  color: #eef2f6;
+}
+
+.roulette-number.zero {
+  background: #2f8f5b;
+  color: #eafaf0;
+}
+
+.roulette-number.idle {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--muted);
+}
+
+.heist-track {
+  position: relative;
+  height: 26px;
+  margin: 10px 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+}
+
+.heist-zone {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgba(80, 220, 140, 0.32);
+  border-left: 1px solid rgba(80, 220, 140, 0.8);
+  border-right: 1px solid rgba(80, 220, 140, 0.8);
+}
+
+.heist-marker {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  margin-left: -1px;
+  background: #ffd166;
+  box-shadow: 0 0 10px #ffd166;
+}
+
 #weapon-wheel {
   position: fixed;
   inset: 0;

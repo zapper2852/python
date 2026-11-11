@@ -103,6 +103,18 @@ function box(material, size, position, rotation = null) {
   return mesh;
 }
 
+function cylinderTo(material, radiusTop, radiusBottom, height, segments, position, rotation = null) {
+  const mesh = new THREE.Mesh(
+    new THREE.CylinderGeometry(radiusTop, radiusBottom, height, segments),
+    material
+  );
+  mesh.position.set(...position);
+  if (rotation) mesh.rotation.set(...rotation);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  return mesh;
+}
+
 function flatQuad(w, d, x, z, y) {
   const geometry = new THREE.PlaneGeometry(w, d);
   geometry.rotateX(-Math.PI / 2);
@@ -176,6 +188,8 @@ let gasStations = [];
 let parkingLots = [];
 let policeStation = { x: -42, z: 42 };
 let lampMaterial = null;
+let casinoSite = null;
+let bankSite = null;
 
 /** Registers a solid box so the physics world can be built from the city. */
 function solid(size, position, rotationY = 0) {
@@ -670,6 +684,285 @@ function signTexture(text, bg, fg) {
   return texture;
 }
 
+/**
+ * Enterable casino: a hollow shell with a doorway, gambling tables, a bar and a
+ * barred vault at the back. The interactive layer lives in `casino.js`; this
+ * only builds the place and hands back where everything is.
+ */
+function buildCasino(scene, bounds) {
+  const cx = (bounds.x0 + bounds.x1) / 2;
+  const cz = (bounds.z0 + bounds.z1) / 2;
+  const w = 44;
+  const d = 36;
+  const h = 10;
+  const door = 7;
+  const base = CITY.curb;
+  const x0 = cx - w / 2;
+  const z0 = cz - d / 2;
+  const z1 = cz + d / 2;
+
+  const stone = new THREE.MeshStandardMaterial({ color: '#372b3d', roughness: 0.88 });
+  const wall = new THREE.MeshStandardMaterial({ color: '#6d4b54', roughness: 0.9 });
+  const carpet = new THREE.MeshStandardMaterial({ color: '#5a1f2b', roughness: 1 });
+  const trim = new THREE.MeshStandardMaterial({ color: '#d9b45f', metalness: 0.75, roughness: 0.3 });
+  const ceiling = new THREE.MeshStandardMaterial({ color: '#241d26', roughness: 1 });
+  const felt = new THREE.MeshStandardMaterial({ color: '#1e6b46', roughness: 0.95 });
+  const wood = new THREE.MeshStandardMaterial({ color: '#3a2a1e', roughness: 0.78 });
+  const chrome = new THREE.MeshStandardMaterial({ color: '#c9ced6', metalness: 0.8, roughness: 0.28 });
+  const glass = glassMaterial();
+
+  // Forecourt and marquee.
+  scene.add(box(stone, [w + 6, 0.06, 9], [cx, base + 0.01, z0 - 4.5]));
+  scene.add(box(stone, [w + 2, 0.5, d + 2], [cx, base + h + 0.2, cz]));
+
+  // Floor and ceiling.
+  scene.add(box(carpet, [w - 1, 0.06, d - 1], [cx, base + 0.02, cz]));
+  scene.add(box(ceiling, [w - 1, 0.12, d - 1], [cx, base + h - 0.25, cz]));
+
+  // Walls: back and sides solid, front split around the doorway.
+  scene.add(box(wall, [w, h, 1], [cx, base + h / 2, z1]));
+  solid([w, h, 1], [cx, base + h / 2, z1]);
+  for (const side of [-1, 1]) {
+    scene.add(box(wall, [1, h, d], [cx + side * (w / 2), base + h / 2, cz]));
+    solid([1, h, d], [cx + side * (w / 2), base + h / 2, cz]);
+  }
+  const frontWidth = (w - door) / 2;
+  for (const side of [-1, 1]) {
+    const fx = cx + side * (door / 2 + frontWidth / 2);
+    scene.add(box(wall, [frontWidth, h, 1], [fx, base + h / 2, z0]));
+    solid([frontWidth, h, 1], [fx, base + h / 2, z0]);
+  }
+  scene.add(box(trim, [door + 1.4, 1.2, 1.4], [cx, base + h - 0.6, z0]));
+
+  // Gold cornice, window band and neon marquee.
+  scene.add(box(trim, [w + 0.7, 0.35, 0.5], [cx, base + h - 0.15, z0 - 0.6]));
+  for (let i = 0; i < 6; i += 1) {
+    const wx = x0 + 5 + i * 6.6;
+    if (Math.abs(wx - cx) < door / 2 + 1.6) continue;
+    scene.add(box(glass, [2.4, 3.2, 0.16], [wx, base + 5.4, z0 - 0.5]));
+  }
+  const marquee = box(trim, [17, 4, 0.3], [cx, base + h + 2.1, z0 - 0.6]);
+  scene.add(marquee);
+  const sign = new THREE.Mesh(
+    new THREE.PlaneGeometry(16, 3.2),
+    new THREE.MeshBasicMaterial({
+      map: signTexture('CASINO', '#150a1c', '#ffcf5c'),
+      toneMapped: false,
+    })
+  );
+  sign.position.set(cx, base + h + 2.1, z0 - 0.78);
+  sign.rotation.y = Math.PI;
+  scene.add(sign);
+
+  // --- tables --------------------------------------------------------------
+  const tableBase = (x, z, radius) => {
+    scene.add(cylinderTo(wood, radius * 0.45, radius * 0.6, 1.0, 16, [x, base + 0.5, z]));
+  };
+  const chipStack = (x, z, color) => {
+    const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.6 });
+    for (let i = 0; i < 3; i += 1) {
+      scene.add(cylinderTo(mat, 0.12, 0.12, 0.04, 10, [x, base + 1.16 + i * 0.045, z]));
+    }
+  };
+
+  // Blackjack: a horseshoe felt table with a dealer well.
+  const blackjack = { x: cx - 10, z: cz - 8 };
+  tableBase(blackjack.x, blackjack.z, 2.4);
+  scene.add(box(wood, [5.6, 0.16, 2.6], [blackjack.x, base + 1.02, blackjack.z]));
+  scene.add(box(felt, [4.9, 0.04, 2.0], [blackjack.x, base + 1.11, blackjack.z]));
+  scene.add(box(trim, [5.0, 0.03, 0.06], [blackjack.x, base + 1.14, blackjack.z - 1.0]));
+  chipStack(blackjack.x - 1.4, blackjack.z + 0.5, '#b8352f');
+  chipStack(blackjack.x + 1.2, blackjack.z - 0.4, '#2c62a8');
+  solid([5.6, 1.2, 2.6], [blackjack.x, base + 0.6, blackjack.z]);
+
+  // Roulette: round table with the wheel and its turret.
+  const roulette = { x: cx + 10, z: cz - 8 };
+  tableBase(roulette.x, roulette.z, 2.4);
+  scene.add(cylinderTo(wood, 2.6, 2.6, 0.16, 28, [roulette.x, base + 1.02, roulette.z]));
+  scene.add(cylinderTo(felt, 2.4, 2.4, 0.04, 28, [roulette.x, base + 1.12, roulette.z]));
+  scene.add(cylinderTo(chrome, 1.15, 1.15, 0.1, 24, [roulette.x, base + 1.18, roulette.z]));
+  scene.add(cylinderTo(wood, 0.9, 0.9, 0.08, 24, [roulette.x, base + 1.25, roulette.z]));
+  const turret = new THREE.Mesh(new THREE.ConeGeometry(0.24, 0.5, 12), chrome);
+  turret.position.set(roulette.x, base + 1.5, roulette.z);
+  scene.add(turret);
+  solid([5.2, 1.2, 5.2], [roulette.x, base + 0.6, roulette.z]);
+
+  // Poker: green oval table with a pot of chips.
+  const poker = { x: cx, z: cz + 2 };
+  tableBase(poker.x, poker.z, 2.6);
+  scene.add(cylinderTo(felt, 2.7, 2.7, 0.16, 30, [poker.x, base + 1.02, poker.z]));
+  scene.add(box(trim, [7.0, 0.05, 7.0], [poker.x, base + 0.98, poker.z]));
+  chipStack(poker.x, poker.z, '#e0c257');
+  chipStack(poker.x + 0.4, poker.z + 0.3, '#b8352f');
+  solid([5.4, 1.2, 5.4], [poker.x, base + 0.6, poker.z]);
+  for (const angle of [0, Math.PI * 0.5, Math.PI, Math.PI * 1.5]) {
+    const sx = poker.x + Math.cos(angle) * 3.9;
+    const sz = poker.z + Math.sin(angle) * 3.9;
+    scene.add(cylinderTo(wood, 0.34, 0.3, 0.9, 10, [sx, base + 0.45, sz]));
+    scene.add(cylinderTo(trim, 0.4, 0.4, 0.1, 10, [sx, base + 0.9, sz]));
+  }
+
+  // --- bar ----------------------------------------------------------------
+  scene.add(box(wood, [16, 1.1, 1.6], [x0 + 11, base + 0.55, z1 - 4.5]));
+  scene.add(box(trim, [16.4, 0.12, 1.9], [x0 + 11, base + 1.14, z1 - 4.5]));
+  for (let i = 0; i < 5; i += 1) {
+    scene.add(box(glass, [0.5, 0.7, 0.5], [x0 + 5 + i * 3, base + 1.55, z1 - 4.5]));
+  }
+  solid([16, 1.4, 1.9], [x0 + 11, base + 0.7, z1 - 4.5]);
+
+  // --- cashier cage and vault ---------------------------------------------
+  const vault = { x: cx + 5, z: z1 - 2.6 };
+  scene.add(box(stone, [11, 5.5, 0.9], [vault.x, base + 2.75, z1 - 0.6]));
+  const doorPlate = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.5, 0.3, 24), chrome);
+  doorPlate.rotation.x = Math.PI / 2;
+  doorPlate.position.set(vault.x, base + 2.6, z1 - 1.1);
+  scene.add(doorPlate);
+  const wheel = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.07, 8, 20), wood);
+  wheel.position.set(vault.x, base + 2.6, z1 - 1.3);
+  scene.add(wheel);
+  for (let i = 0; i < 7; i += 1) {
+    scene.add(box(trim, [0.09, 2.6, 0.09], [vault.x - 4.6 + i * 1.53, base + 2.2, z1 - 1.15]));
+  }
+  scene.add(box(trim, [11, 0.12, 0.12], [vault.x, base + 3.4, z1 - 1.15]));
+
+  // --- lights -------------------------------------------------------------
+  for (const [lx, lz, power] of [
+    [cx, cz - 6, 55],
+    [cx, cz + 8, 45],
+    [vault.x, z1 - 6, 30],
+  ]) {
+    const light = new THREE.PointLight('#ffd9a0', power, 30, 2);
+    light.position.set(lx, base + 7.4, lz);
+    scene.add(light);
+    const shade = new THREE.Mesh(new THREE.SphereGeometry(0.55, 14, 10), trim);
+    shade.position.set(lx, base + 8.4, lz);
+    scene.add(shade);
+  }
+
+  // Doorway marker so the entrance reads from the street.
+  casinoSite = {
+    x: cx,
+    z: cz,
+    entrance: { x: cx, z: z0 },
+    interior: { x0: x0 + 1.4, x1: cx + w / 2 - 1.4, z0: z0 + 0.6, z1: z1 - 1.4 },
+    tables: [
+      { kind: 'blackjack', x: blackjack.x, z: blackjack.z },
+      { kind: 'roulette', x: roulette.x, z: roulette.z },
+      { kind: 'poker', x: poker.x, z: poker.z },
+    ],
+    vault,
+    guard: { x: vault.x - 6.5, z: z1 - 5 },
+  };
+}
+
+/**
+ * Enterable bank: a stone lobby with a teller counter for deposits and
+ * withdrawals, and a vault worth robbing on the east wall.
+ */
+function buildBank(scene, bounds) {
+  const cx = (bounds.x0 + bounds.x1) / 2;
+  const cz = (bounds.z0 + bounds.z1) / 2;
+  const w = 42;
+  const d = 30;
+  const h = 9;
+  const door = 6;
+  const base = CITY.curb;
+  const x0 = cx - w / 2;
+  const z0 = cz - d / 2;
+  const z1 = cz + d / 2;
+
+  const stone = new THREE.MeshStandardMaterial({ color: '#8f887b', roughness: 0.92 });
+  const marble = new THREE.MeshStandardMaterial({ color: '#d7d2c6', roughness: 0.6 });
+  const floorMat = new THREE.MeshStandardMaterial({ color: '#b9b3a6', roughness: 0.75 });
+  const wall = new THREE.MeshStandardMaterial({ color: '#c6c0b2', roughness: 0.85 });
+  const brass = new THREE.MeshStandardMaterial({ color: '#c9a75b', metalness: 0.8, roughness: 0.3 });
+  const steel = new THREE.MeshStandardMaterial({ color: '#9aa2aa', metalness: 0.7, roughness: 0.35 });
+  const glass = glassMaterial();
+
+  scene.add(box(stone, [w + 8, 0.06, 10], [cx, base + 0.01, z0 - 5]));
+  scene.add(box(stone, [w + 2, 0.6, d + 2], [cx, base + h + 0.3, cz]));
+  scene.add(box(floorMat, [w - 1, 0.06, d - 1], [cx, base + 0.02, cz]));
+
+  scene.add(box(wall, [w, h, 1], [cx, base + h / 2, z1]));
+  solid([w, h, 1], [cx, base + h / 2, z1]);
+  for (const side of [-1, 1]) {
+    scene.add(box(wall, [1, h, d], [cx + side * (w / 2), base + h / 2, cz]));
+    solid([1, h, d], [cx + side * (w / 2), base + h / 2, cz]);
+  }
+  const frontWidth = (w - door) / 2;
+  for (const side of [-1, 1]) {
+    const fx = cx + side * (door / 2 + frontWidth / 2);
+    scene.add(box(wall, [frontWidth, h, 1], [fx, base + h / 2, z0]));
+    solid([frontWidth, h, 1], [fx, base + h / 2, z0]);
+  }
+  scene.add(box(marble, [door + 1.2, 1.1, 1.3], [cx, base + h - 0.55, z0]));
+
+  // Facade: pediment and columns.
+  scene.add(box(marble, [w + 0.8, 0.5, 0.8], [cx, base + h + 0.5, z0 - 0.4]));
+  for (let i = 0; i < 6; i += 1) {
+    const colX = cx - 15 + i * 6;
+    if (Math.abs(colX - cx) < door / 2 + 1.2) continue;
+    scene.add(cylinderTo(marble, 0.55, 0.65, h - 0.4, 12, [colX, base + (h - 0.4) / 2, z0 - 1.8]));
+    solid([1.2, h, 1.2], [colX, base + h / 2, z0 - 1.8]);
+  }
+
+  const sign = new THREE.Mesh(
+    new THREE.PlaneGeometry(14, 2.6),
+    new THREE.MeshBasicMaterial({
+      map: signTexture('BANK', '#101a26', '#e8f2ff'),
+      toneMapped: false,
+    })
+  );
+  sign.position.set(cx, base + h + 2.1, z0 - 0.9);
+  sign.rotation.y = Math.PI;
+  scene.add(sign);
+  scene.add(box(marble, [15, 3.4, 0.3], [cx, base + h + 2.1, z0 - 0.6]));
+
+  // Teller counter across the back half of the lobby.
+  const teller = { x: cx, z: cz + 7 };
+  scene.add(box(marble, [18, 1.15, 1.8], [teller.x, base + 0.58, teller.z]));
+  scene.add(box(brass, [18.4, 0.1, 2.1], [teller.x, base + 1.19, teller.z]));
+  for (let i = 0; i < 5; i += 1) {
+    scene.add(box(glass, [2.6, 2.2, 0.08], [teller.x - 7.2 + i * 3.6, base + 2.4, teller.z - 0.6]));
+  }
+  solid([18, 1.4, 2.1], [teller.x, base + 0.7, teller.z]);
+
+  // Vault on the east wall.
+  const vault = { x: cx + w / 2 - 2.2, z: cz - 2 };
+  scene.add(box(steel, [0.9, 5.2, 9], [cx + w / 2 - 0.8, base + 2.6, vault.z]));
+  const doorPlate = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.6, 0.35, 26), steel);
+  doorPlate.rotation.z = Math.PI / 2;
+  doorPlate.position.set(cx + w / 2 - 1.4, base + 2.5, vault.z);
+  scene.add(doorPlate);
+  const handle = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.08, 8, 22), brass);
+  handle.rotation.y = Math.PI / 2;
+  handle.position.set(cx + w / 2 - 1.65, base + 2.5, vault.z);
+  scene.add(handle);
+  for (let i = 0; i < 4; i += 1) {
+    scene.add(box(brass, [0.1, 1.9, 0.1], [cx + w / 2 - 1.3, base + 4.3, vault.z - 3.4 + i * 2.2]));
+  }
+
+  // Marble floor inlay and two lamps.
+  scene.add(box(brass, [10, 0.02, 10], [cx, base + 0.06, cz - 2]));
+  for (const [lx, lz] of [
+    [cx - 8, cz - 2],
+    [cx + 6, cz + 6],
+  ]) {
+    const light = new THREE.PointLight('#ffeecb', 40, 24, 2);
+    light.position.set(lx, base + 6.6, lz);
+    scene.add(light);
+  }
+
+  bankSite = {
+    x: cx,
+    z: cz,
+    entrance: { x: cx, z: z0 },
+    interior: { x0: x0 + 1.4, x1: cx + w / 2 - 1.4, z0: z0 + 0.6, z1: z1 - 1.4 },
+    teller,
+    vault,
+  };
+}
+
 function buildPoliceStation(scene, bounds, rngFn) {
   const cx = (bounds.x0 + bounds.x1) / 2;
   const cz = (bounds.z0 + bounds.z1) / 2;
@@ -952,6 +1245,8 @@ export function buildCity(scene) {
   parkingLots = [];
   treeTrunks = [];
   treeCrowns = [];
+  casinoSite = null;
+  bankSite = null;
   const random = rng(20261109);
   const facades = [
     facadeMaterial('#b7b1a4', '#9fb6c6', '#3b4b57'),
@@ -976,6 +1271,8 @@ export function buildCity(scene) {
     ['1,1', 'construction'],
     ['-2,-2', 'plaza'],
     ['-1,0', 'police'],
+    ['-2,0', 'casino'],
+    ['-1,-1', 'bank'],
   ]);
 
   for (let i = -CITY.blocks; i < CITY.blocks; i += 1) {
@@ -985,6 +1282,8 @@ export function buildCity(scene) {
       const price = gasStations.length === 0 ? 1.32 : 1.19;
       if (kind === 'gas') buildGasStation(scene, bounds, j > 0 ? '#1f6fb2' : '#c0392b', price, random);
       else if (kind === 'police') buildPoliceStation(scene, bounds, random);
+      else if (kind === 'casino') buildCasino(scene, bounds);
+      else if (kind === 'bank') buildBank(scene, bounds);
       else if (kind === 'parking') buildParkingLot(scene, bounds, random);
       else if (kind === 'park') buildPark(scene, bounds, random);
       else if (kind === 'plaza') buildPlaza(scene, bounds, random);
@@ -999,5 +1298,14 @@ export function buildCity(scene) {
   mergeParkedCars(scene);
   const signals = buildSignals(scene);
 
-  return { colliders, gasStations, signals, lampMaterial, policeStation, parkingLots };
+  return {
+    colliders,
+    gasStations,
+    signals,
+    lampMaterial,
+    policeStation,
+    parkingLots,
+    casinoSite,
+    bankSite,
+  };
 }

@@ -475,5 +475,14 @@ export function createTraffic(scene, car, count = 24, world = null) {
     }
   }
 
-  return { cars, update };
+  /** Takes a car out of service for good — used when the player steals one. */
+  function remove(ai) {
+    const index = cars.indexOf(ai);
+    if (index >= 0) cars.splice(index, 1);
+    if (ai.body && world) world.removeBody(ai.body);
+    ai.group.removeFromParent();
+    ai.removed = true;
+  }
+
+  return { cars, update, remove };
 }

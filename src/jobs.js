@@ -11,6 +11,8 @@ export const SHOP_ITEMS = [
   { id: 'pistol_ammo', name: 'Pistol ammo (15)', price: 40, kind: 'ammo', weapon: 'pistol', amount: 15 },
   { id: 'rifle_ammo', name: 'Rifle ammo (30)', price: 70, kind: 'ammo', weapon: 'rifle', amount: 30 },
   { id: 'rifle', name: 'Assault rifle', price: 850, kind: 'weapon', weapon: 'rifle' },
+  { id: 'carbine', name: 'Semi-auto rifle', price: 720, kind: 'weapon', weapon: 'carbine' },
+  { id: 'carbine_ammo', name: 'Semi-auto rifle ammo (20)', price: 55, kind: 'ammo', weapon: 'carbine', amount: 20 },
   { id: 'medkit', name: 'Medkit (+60 health)', price: 90, kind: 'health', amount: 60 },
   { id: 'repair', name: 'Repair kit (car)', price: 130, kind: 'repair' },
 ];

@@ -15,6 +15,9 @@ import { Game, FUEL_CAPACITY } from './game.js';
 import { AudioKit } from './audio.js';
 import { Weapons, WEAPONS } from './weapons.js';
 import { Ragdolls } from './ragdoll.js';
+import { VenuePanel } from './venue.js';
+import { Casino } from './casino.js';
+import { Bank } from './bank.js';
 import { VehicleDamage } from './damage.js';
 import { Police } from './police.js';
 import { JobBoard, SHOP_ITEMS } from './jobs.js';
@@ -63,6 +66,17 @@ const player = new Player(scene);
 const hud = new Hud(game);
 const weapons = new Weapons(game, audio, scene);
 const ragdolls = new Ragdolls(scene, world);
+const venue = new VenuePanel();
+const casino = new Casino({
+  scene,
+  game,
+  audio,
+  ragdolls,
+  site: city.casinoSite,
+  panel: venue,
+  weapons,
+});
+const bank = new Bank({ scene, game, site: city.bankSite, panel: venue, audio, weapons });
 
 const damage = new VehicleDamage(car, {
   scene,
@@ -94,6 +108,12 @@ const minimap = new Minimap(document.getElementById('minimap'), {
     ...jobs.markers.map((m) => ({ x: m.x, z: m.z, color: m.color, label: m.label })),
     { x: city.policeStation.x, z: city.policeStation.z, color: '#4d8dff', label: 'P' },
     ...bikes.map((b) => ({ x: b.home.x, z: b.home.z, color: '#e8452f', label: 'B' })),
+    ...(city.casinoSite
+      ? [{ x: city.casinoSite.x, z: city.casinoSite.z, color: '#ffcf5c', label: 'C' }]
+      : []),
+    ...(city.bankSite
+      ? [{ x: city.bankSite.x, z: city.bankSite.z, color: '#7ec8ff', label: 'K' }]
+      : []),
   ],
 });
 
@@ -129,6 +149,7 @@ player.playEnterCar(car);
 player.entry = null;
 player.group.position.set(0.35, -0.78, 0.15);
 player.group.rotation.set(0, 0, 0);
+player.group.scale.setScalar(0.75);
 car.model.setDoor(0);
 
 // --- interaction -----------------------------------------------------------
@@ -169,6 +190,76 @@ function playerPosition() {
   return { x: player.position.x, z: player.position.z };
 }
 
+// --- pedestrians and ragdolls ----------------------------------------------
+function pedColors(ped) {
+  const m = ped.rig.materials;
+  return {
+    shirt: m.shirt.color.getHexString(),
+    pants: m.pants.color.getHexString(),
+    skin: m.skin.color.getHexString(),
+  };
+}
+
+/** Swaps a walking pedestrian for a physical ragdoll launched at `velocity`. */
+function downPedestrian(ped, velocity) {
+  if (ped.down) return false;
+  peds.kill(ped);
+  ragdolls.spawn({
+    position: { x: ped.pos.x, y: 1.05, z: ped.pos.y },
+    velocity,
+    colors: pedColors(ped),
+  });
+  return true;
+}
+
+const strikeQuat = new THREE.Quaternion();
+const strikeForward = new THREE.Vector3();
+const strikeLateral = new THREE.Vector3();
+
+/**
+ * A vehicle sweeping through a pedestrian knocks them over: the walker is
+ * replaced by a ragdoll carrying the car's momentum, so the body tumbles and
+ * bounces off the tarmac instead of walking through the bumper.
+ */
+function checkVehicleHits() {
+  if (onFoot) return;
+  const body = mount === 'bike' ? bike.chassisBody : car.chassisBody;
+  const speed = Math.hypot(body.velocity.x, body.velocity.z);
+  if (speed < 2.4) return;
+
+  strikeQuat.set(body.quaternion.x, body.quaternion.y, body.quaternion.z, body.quaternion.w);
+  strikeForward.set(0, 0, -1).applyQuaternion(strikeQuat);
+  strikeForward.y = 0;
+  if (strikeForward.lengthSq() < 1e-5) return;
+  strikeForward.normalize();
+  strikeLateral.set(-strikeForward.z, 0, strikeForward.x);
+
+  const onBike = mount === 'bike';
+  const reach = onBike ? 1.9 : 2.9;
+  const halfWidth = onBike ? 0.9 : 1.4;
+  const push = Math.min(speed, 26);
+
+  for (const ped of peds.peds) {
+    if (ped.down) continue;
+    const dx = ped.pos.x - body.position.x;
+    const dz = ped.pos.y - body.position.z;
+    const along = dx * strikeForward.x + dz * strikeForward.z;
+    const side = dx * strikeLateral.x + dz * strikeLateral.z;
+    if (along < -1.3 || along > reach || Math.abs(side) > halfWidth) continue;
+    if (Math.abs(ped.pos.y - body.position.z) > 4) continue;
+
+    const shove = Math.sign(side || 1) * push * 0.3;
+    downPedestrian(ped, {
+      x: body.velocity.x * 0.85 - strikeForward.x * push * 0.15 + strikeLateral.x * shove,
+      y: 1.7 + push * 0.22,
+      z: body.velocity.z * 0.85 - strikeForward.z * push * 0.15 + strikeLateral.z * shove,
+    });
+    game.stats.civiliansDown += 1;
+    game.crime('civilian', 2);
+    audio.punch();
+  }
+}
+
 function nearestBike(position, radius = 4.5) {
   let best = null;
   let bestDistance = radius;
@@ -188,7 +279,7 @@ function nearestBike(position, radius = 4.5) {
 function refreshPrompt() {
   promptText = '';
   pendingInteract = null;
-  if (game.jailed || hud.shopOpen) return;
+  if (game.jailed || hud.shopOpen || venue.open) return;
   const pos = playerPosition();
 
   if (!onFoot) {
@@ -222,6 +313,13 @@ function refreshPrompt() {
     return;
   }
 
+  const venuePrompt = casino.prompt(player.position) || bank.prompt(player.position);
+  if (venuePrompt) {
+    promptText = venuePrompt.text;
+    pendingInteract = venuePrompt.run || null;
+    return;
+  }
+
   const parkedBike = nearestBike(player.position, 4);
   if (parkedBike) {
     promptText = 'E · Ride the motorcycle';
@@ -244,6 +342,10 @@ function refreshPrompt() {
 }
 
 function interact() {
+  if (venue.open) {
+    venue.hide();
+    return;
+  }
   if (hud.shopOpen) {
     hud.hideShop();
     return;
@@ -300,21 +402,29 @@ function hijack(ai) {
     colors: { shirt: '#3d7a4f', pants: '#2b303a' },
   });
 
-  ai.group.visible = false;
-  if (ai.body) ai.body.collisionResponse = false;
+  const color = ai.model.group.children[0]?.material?.color?.clone();
 
-  // Take the car: move the player's physics car onto the stolen one.
+  // The stolen car leaves the traffic system completely: its kinematic body
+  // would otherwise sit inside the player's car and swallow the wheel raycasts,
+  // which is what made a hijacked car impossible to drive.
+  traffic.remove(ai);
+
+  // Take the wheel: move the player's physics car onto the stolen one, fresh and
+  // working, then climb in through the door.
   mount = 'car';
   onFoot = false;
-  const color = ai.model.group.children[0]?.material?.color;
-  if (color) {
-    car.model.shell.material.color.copy(color);
-    car.model.bumpers.front.children.forEach((child) => child.material.color.set('#14171b'));
-  }
+  if (color) car.model.shell.material.color.copy(color);
+  damage.repair();
+  car.disabled = false;
+  car.brakeRamp = 0;
+  car.gear = 1;
+  car.shiftTimer = 0;
+  car.m_steeringAngle = 0;
   car.chassisBody.position.set(ai.pos.x, 1.05, ai.pos.z);
   car.chassisBody.quaternion.setFromEuler(0, ai.yaw, 0);
   car.chassisBody.velocity.set(0, 0, 0);
   car.chassisBody.angularVelocity.set(0, 0, 0);
+  for (const parked of bikes) parked.setControlEnabled(false);
   player.playEnterCar(car);
   car.setControlEnabled(true);
   view = 'chase';
@@ -335,6 +445,7 @@ window.addEventListener('keydown', (event) => {
   }
 
   if (event.code === 'Escape') {
+    venue.hide();
     hud.hideShop();
     hud.hideWheel();
     return;
@@ -416,7 +527,7 @@ window.addEventListener('mousemove', (event) => {
 window.addEventListener('mousedown', (event) => {
   audio.ensure();
   if (event.button !== 0) return;
-  if (hud.shopOpen || hud.wheelOpen || game.jailed) return;
+  if (hud.shopOpen || hud.wheelOpen || venue.open || game.jailed) return;
   if (!onFoot) return;
   triggerHeld = true;
   if (!player.aiming) return;
@@ -475,6 +586,13 @@ function hitTest(origin, direction, maxDistance) {
   for (const officer of police.officers) {
     consider({ x: officer.pos.x, y: 1.05, z: officer.pos.z }, 0.55, { type: 'officer', ref: officer });
   }
+  if (casino.guard && casino.guard.alive) {
+    consider(
+      { x: casino.guard.pos.x, y: 1.05, z: casino.guard.pos.z },
+      0.55,
+      { type: 'bodyguard', ref: casino.guard }
+    );
+  }
   for (const ai of traffic.cars) {
     if (ai.stolen && ai.group.visible === false) continue;
     consider({ x: ai.pos.x, y: 0.85, z: ai.pos.z }, 1.5, { type: 'car', ref: ai });
@@ -492,18 +610,16 @@ game.on('shot', ({ hit }) => {
 
   if (target.type === 'ped') {
     const ped = target.ref;
-    peds.kill(ped);
-    ragdolls.spawn({
-      position: { x: ped.pos.x, y: 1.1, z: ped.pos.y },
-      velocity: { x: -Math.sin(player.yaw) * 2.5, y: 1.4, z: -Math.cos(player.yaw) * 2.5 },
-      colors: {
-        shirt: ped.rig.materials.shirt.color.getHexString(),
-        pants: ped.rig.materials.pants.color.getHexString(),
-        skin: ped.rig.materials.skin.color.getHexString(),
-      },
+    downPedestrian(ped, {
+      x: -Math.sin(player.yaw) * 2.5,
+      y: 1.4,
+      z: -Math.cos(player.yaw) * 2.5,
     });
     game.stats.civiliansDown += 1;
     game.crime('civilian', 3);
+  } else if (target.type === 'bodyguard') {
+    casino.downBodyguard(target.ref);
+    game.crime('police', 3);
   } else if (target.type === 'officer') {
     const officer = target.ref;
     ragdolls.spawn({
@@ -524,17 +640,15 @@ game.on('punch', ({ hit }) => {
   if (!hit) return;
   const { target } = hit;
   if (target.type === 'ped') {
-    peds.kill(target.ref);
-    ragdolls.spawn({
-      position: { x: target.ref.pos.x, y: 1.1, z: target.ref.pos.y },
-      velocity: { x: -Math.sin(player.yaw) * 3.4, y: 1.2, z: -Math.cos(player.yaw) * 3.4 },
-      colors: {
-        shirt: target.ref.rig.materials.shirt.color.getHexString(),
-        pants: target.ref.rig.materials.pants.color.getHexString(),
-        skin: target.ref.rig.materials.skin.color.getHexString(),
-      },
+    downPedestrian(target.ref, {
+      x: -Math.sin(player.yaw) * 3.4,
+      y: 1.2,
+      z: -Math.cos(player.yaw) * 3.4,
     });
     game.crime('civilian', 3);
+  } else if (target.type === 'bodyguard') {
+    casino.downBodyguard(target.ref);
+    game.crime('police', 3);
   } else if (target.type === 'officer') {
     police.despawnOfficer(target.ref);
     game.crime('police', 4);
@@ -731,6 +845,8 @@ function frame() {
     accumulator -= FIXED_STEP;
   }
 
+  checkVehicleHits();
+
   car.syncMeshes();
   for (const parked of bikes) parked.syncMeshes(parked === bike && !onFoot);
 
@@ -743,16 +859,20 @@ function frame() {
   }
   city.signals.update(elapsed);
 
+  // A venue panel (tables, teller, vault) holds the player still.
+  const frozen = venue.open;
   if (onFoot) {
-    const rotate = (keys.has('KeyQ') ? 1 : 0) - (keys.has('KeyE') ? 1 : 0);
+    const rotate = frozen ? 0 : (keys.has('KeyQ') ? 1 : 0) - (keys.has('KeyE') ? 1 : 0);
     camYaw += rotate * 2.1 * delta;
 
-    const moveForward =
-      (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0) -
-      (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0);
-    const moveRight =
-      (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) -
-      (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0);
+    const moveForward = frozen
+      ? 0
+      : (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0) -
+        (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0);
+    const moveRight = frozen
+      ? 0
+      : (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) -
+        (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0);
 
     player.updateOnFoot(delta, {
       forward: moveForward,
@@ -780,6 +900,8 @@ function frame() {
   });
 
   jobs.update(delta, position);
+  casino.update(delta, player.position);
+  bank.update(delta);
   damage.update(delta);
   ragdolls.update(delta);
   weapons.update(delta);
@@ -794,7 +916,7 @@ function frame() {
 
   player.setAiming(onFoot && Boolean(player.weaponId) && player.weaponId !== 'fist');
 
-  if (triggerHeld && onFoot && player.aiming && weapons.def.auto) {
+  if (triggerHeld && onFoot && !venue.open && player.aiming && weapons.def.auto) {
     weapons.tryFire(shootOrigin(), aimDirection(), hitTest);
   }
 
@@ -884,6 +1006,9 @@ window.carDemo = {
   damage,
   weapons,
   ragdolls,
+  venue,
+  casino,
+  bank,
   dayNight,
   reset: snapCamera,
   getView: () => (onFoot ? (player.firstPerson ? 'firstPerson' : 'foot') : view),
